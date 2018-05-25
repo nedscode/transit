@@ -1,0 +1,131 @@
+--- transit.swagger.json.orig	2018-05-25 17:26:28.000000000 +1000
++++ transit.swagger.json	2018-05-25 17:26:28.000000000 +1000
+@@ -13,6 +13,14 @@
+   "produces": [
+     "application/json"
+   ],
++  "components": {
++    "securitySchemes": {
++      "auth": {
++        "type": "http",
++        "scheme": "Token"
++      }
++    }
++  },
+   "paths": {
+     "/api/v1/ack/{prefix}/{group}/{id}": {
+       "get": {
+@@ -43,13 +51,16 @@
+             "name": "id",
+             "in": "path",
+             "required": true,
+-            "type": "string",
++            "type": "integer",
+             "format": "uint64"
+           }
+         ],
+         "tags": [
+           "Transit"
+-        ]
++        ],
++        "security": {
++          "auth": []
++        }
+       }
+     },
+     "/api/v1/ping/{id}": {
+@@ -69,7 +80,7 @@
+             "name": "id",
+             "in": "path",
+             "required": true,
+-            "type": "string",
++            "type": "integer",
+             "format": "uint64"
+           },
+           {
+@@ -88,7 +99,10 @@
+         ],
+         "tags": [
+           "Transit"
+-        ]
++        ],
++        "security": {
++          "auth": []
++        }
+       }
+     },
+     "/api/v1/publish": {
+@@ -115,7 +129,10 @@
+         ],
+         "tags": [
+           "Transit"
+-        ]
++        ],
++        "security": {
++          "auth": []
++        }
+       }
+     },
+     "/api/v1/subscribe/{prefix}/{group}": {
+@@ -197,7 +214,10 @@
+         ],
+         "tags": [
+           "Transit"
+-        ]
++        ],
++        "security": {
++          "auth": []
++        }
+       }
+     }
+   },
+@@ -257,7 +277,7 @@
+       "type": "object",
+       "properties": {
+         "id": {
+-          "type": "string",
++          "type": "integer",
+           "format": "uint64"
+         },
+         "topic": {
+@@ -273,11 +293,11 @@
+           "$ref": "#/definitions/protobufAny"
+         },
+         "not_before": {
+-          "type": "string",
++          "type": "integer",
+           "format": "uint64"
+         },
+         "not_after": {
+-          "type": "string",
++          "type": "integer",
+           "format": "uint64"
+         },
+         "meta": {
+@@ -303,7 +323,7 @@
+       "type": "object",
+       "properties": {
+         "id": {
+-          "type": "string",
++          "type": "integer",
+           "format": "uint64"
+         },
+         "leader": {
+@@ -319,7 +339,7 @@
+       "type": "object",
+       "properties": {
+         "id": {
+-          "type": "string",
++          "type": "integer",
+           "format": "uint64"
+         }
+       }
+@@ -353,7 +373,7 @@
+           "type": "string"
+         },
+         "id": {
+-          "type": "string",
++          "type": "integer",
+           "format": "uint64"
+         }
+       }

@@ -1,0 +1,204 @@
+syntax = "proto3";
+
+import "google/protobuf/any.proto";
+//import "google/protobuf/empty.proto";
+//import "google/protobuf/timestamp.proto";
+import "google/api/annotations.proto";
+import "protoc-gen-swagger/options/annotations.proto";
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+import "github.com/mwitkow/go-proto-validators/validator.proto";
+
+option go_package = "github.com/nedscode/transit/proto;transit";
+
+option (grpc.gateway.protoc_gen_swagger.options.openapiv2_swagger) = {
+  info: {
+    version: "1.0";
+  };
+external_docs:{
+url:"https://github.com/nedscode/transit";
+description:"Transit server repository";
+}
+schemes:HTTPS;
+};
+
+option (gogoproto.goproto_registration) = true;
+
+service Transit {
+    // Ping tests server is alive.
+    rpc Ping(Pong) returns (Pong) {
+        option (google.api.http) = {
+            get: "/api/v1/ping/{id}"
+        };
+    }
+
+    // Publish takes a message entry and returns the published message id.
+    rpc Publish (Entry) returns (Publication) {
+        option (google.api.http) = {
+            post: "/api/v1/publish"
+            body: "*"
+        };
+    }
+
+    // Subscribe takes topic and group details and returns a subscription stream.
+    rpc Subscribe (Subscription) returns (stream Notification) {
+        option (google.api.http) = {
+            get: "/api/v1/subscribe/{prefix}/{group}"
+        };
+    }
+
+    // Ack acknowledges the successful receipt and processing of a message id.
+    // Acknowledging a message allows you to receive a new message.
+    rpc Ack(Sub) returns (Acked) {
+        option (google.api.http) = {
+            get: "/api/v1/ack/{prefix}/{group}/{id}"
+        };
+    }
+
+    // ClusterApply is for applying a set of transformation commands to the cluster's state.
+    rpc ClusterApply(ApplyCommands) returns (Success) {}
+
+    // ClusterGetKeys returns the state values for a given set of cluster keys.
+    rpc ClusterGetKeys(Strings) returns (StringMap) {}
+
+    // ClusterList returns a list of keys and values, with the provided prefix from the cluster.
+    rpc ClusterList(String) returns (StringMap) {}
+
+    // ClusterJoin makes the current leader server perform a join with the given server.
+    rpc ClusterJoin(Server) returns (Success) {}
+
+    // ClusterLeader returns the gRPC address of the current cluster leader.
+    rpc ClusterLeader(Void) returns (String) {}
+}
+
+enum DistributionStrategy {
+    // Arbitrary distribution means that any processor may get any message.
+    Arbitrary = 0;
+    // Requested distribution limits messages to processors that have requested type of the specific lot.
+    Requested = 1;
+    // Assigned distribution will assign unrequested lots to processors based on load.
+    Assigned = 2;
+}
+
+enum DeliveryStrategy {
+    // Concurrent messages are not treated specially.
+    Concurrent = 0;
+    // Drop means if there's currently one waiting, don't bother with this one and drop it.
+    Drop = 1;
+    // Replace means if there's currently one waiting, replace it with this one.
+    Replace = 2;
+    // Ignore means if there's currently one waiting, delete it and place this one at the back of the queue.
+    Ignore = 3;
+    // A Serial message will not begin processing a duplicate identity message at the same time as another.
+    Serial = 4;
+}
+
+message Pong {
+    uint64 id = 1 [
+        (gogoproto.customname) = "ID",
+        (validator.field) = {
+            int_gt: 0
+            human_error: "ID must a positive integer"
+        }
+    ];
+    string leader = 2;
+    bool leading = 3;
+}
+
+message Publication {
+    uint64 id = 1 [
+        (gogoproto.customname) = "ID",
+        (validator.field) = {
+            int_gt: 0
+            human_error: "ID must a positive integer"
+    }];
+}
+
+message Entry {
+    uint64 id = 1 [
+        (gogoproto.customname) = "ID"
+    ];
+
+    string topic = 5 [
+        (validator.field) = {
+            string_not_empty: true
+            human_error: "A topic must be supplied"
+        }
+    ];
+    string lot = 6;
+    string identity = 7;
+
+    google.protobuf.Any message = 10;
+
+    uint64 not_before = 20;
+    uint64 not_after = 21;
+
+    map<string,string> meta = 90;
+}
+
+message Subscription {
+    string prefix = 1;
+    string group = 2;
+
+    repeated string allotments = 10;
+
+    uint64 delay = 20;
+    uint64 max_age = 21;
+
+    DistributionStrategy distribution = 30;
+    DeliveryStrategy delivery = 31;
+}
+
+message Notification {
+    Sub sub = 1;
+    Entry entry = 2;
+}
+
+message Sub {
+    string prefix = 1;
+    string group = 2;
+    uint64 id = 3 [
+        (gogoproto.customname) = "ID"
+    ];
+}
+
+message Acked {
+    bool success = 1;
+}
+
+message ApplyCommands {
+    repeated Command commands = 1;
+}
+
+message Command {
+    string operation = 1;
+    string key = 2;
+    string value = 3;
+    string compare = 4;
+    string versus = 5;
+}
+
+message Server {
+    string id = 1 [
+        (gogoproto.customname) = "ID"
+    ];
+    string address = 2;
+}
+
+message Success {
+    bool succeed = 1;
+    string error = 2;
+}
+
+message String {
+    string value = 1;
+}
+
+message Strings {
+    repeated string values = 1;
+}
+
+message StringMap {
+    map<string,string> values = 1;
+}
+
+message Void {}
