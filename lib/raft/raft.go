@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -77,6 +78,7 @@ func (s *Store) Start(ctx context.Context, persist bool) error {
 	config := raft.DefaultConfig()
 	config.LocalID = raft.ServerID(s.id)
 	config.NotifyCh = notifyChan
+	address := strings.Split(s.id, ":")[0]
 
 	go func() {
 		var peerList string
@@ -97,6 +99,9 @@ func (s *Store) Start(ctx context.Context, persist bool) error {
 				if peers != peerList {
 					// Write the new cluster file
 					s.logger.WithField("peers", addrs).Info("Peer list has changed")
+					cluster := fmt.Sprintf("transit://%s/%s", peers, s.Key())
+					ioutil.WriteFile(path.Join(s.dataDir, "cluster"), []byte(cluster), 0600)
+					peerList = peers
 				}
 			case <-ctx.Done():
 				return
@@ -143,12 +148,13 @@ func (s *Store) Start(ctx context.Context, persist bool) error {
 			return fmt.Errorf("cannot boot, cluster already has key")
 		}
 
+		s.logger.WithField("id", config.LocalID).WithField("addr", s.bind).Info("booting")
 		// This cluster has not been initialised yet.
 		s.raft.BootstrapCluster(raft.Configuration{
 			Servers: []raft.Server{
 				{
 					ID:      config.LocalID,
-					Address: transport.LocalAddr(),
+					Address: raft.ServerAddress(address + s.bind),
 				},
 			},
 		})
@@ -204,6 +210,7 @@ func (s *Store) List(prefix string) (list map[string]string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	list = map[string]string{}
 	for k, v := range s.m {
 		if strings.HasPrefix(k, prefix) {
 			list[k] = v

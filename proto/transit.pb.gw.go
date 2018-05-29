@@ -132,8 +132,12 @@ func request_Transit_Subscribe_0(ctx context.Context, marshaler runtime.Marshale
 
 }
 
+var (
+	filter_Transit_Ack_0 = &utilities.DoubleArray{Encoding: map[string]int{"sub": 0, "prefix": 1, "group": 2, "id": 3}, Base: []int{1, 1, 1, 2, 3, 0, 0, 0}, Check: []int{0, 1, 2, 2, 2, 3, 4, 5}}
+)
+
 func request_Transit_Ack_0(ctx context.Context, marshaler runtime.Marshaler, client TransitClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq Sub
+	var protoReq Acknowledgement
 	var metadata runtime.ServerMetadata
 
 	var (
@@ -143,37 +147,41 @@ func request_Transit_Ack_0(ctx context.Context, marshaler runtime.Marshaler, cli
 		_   = err
 	)
 
-	val, ok = pathParams["prefix"]
+	val, ok = pathParams["sub.prefix"]
 	if !ok {
-		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "prefix")
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "sub.prefix")
 	}
 
-	protoReq.Prefix, err = runtime.String(val)
+	err = runtime.PopulateFieldFromPath(&protoReq, "sub.prefix", val)
 
 	if err != nil {
-		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "prefix", err)
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "sub.prefix", err)
 	}
 
-	val, ok = pathParams["group"]
+	val, ok = pathParams["sub.group"]
 	if !ok {
-		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "group")
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "sub.group")
 	}
 
-	protoReq.Group, err = runtime.String(val)
+	err = runtime.PopulateFieldFromPath(&protoReq, "sub.group", val)
 
 	if err != nil {
-		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "group", err)
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "sub.group", err)
 	}
 
-	val, ok = pathParams["id"]
+	val, ok = pathParams["sub.id"]
 	if !ok {
-		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "id")
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "sub.id")
 	}
 
-	protoReq.ID, err = runtime.Uint64(val)
+	err = runtime.PopulateFieldFromPath(&protoReq, "sub.id", val)
 
 	if err != nil {
-		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "id", err)
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "sub.id", err)
+	}
+
+	if err := runtime.PopulateQueryParameters(&protoReq, req.URL.Query(), filter_Transit_Ack_0); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
 	}
 
 	msg, err := client.Ack(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
@@ -345,7 +353,7 @@ var (
 
 	pattern_Transit_Subscribe_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 1, 0, 4, 1, 5, 4}, []string{"api", "v1", "subscribe", "prefix", "group"}, ""))
 
-	pattern_Transit_Ack_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 1, 0, 4, 1, 5, 4, 1, 0, 4, 1, 5, 5}, []string{"api", "v1", "ack", "prefix", "group", "id"}, ""))
+	pattern_Transit_Ack_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 1, 0, 4, 1, 5, 3, 1, 0, 4, 1, 5, 4, 1, 0, 4, 1, 5, 5}, []string{"api", "v1", "ack", "sub.prefix", "sub.group", "sub.id"}, ""))
 )
 
 var (

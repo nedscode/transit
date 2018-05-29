@@ -137,7 +137,7 @@ func (c *Config) startServer() error {
 	// Save the current cluster connection string
 	c.Cluster = fmt.Sprintf("transit://%s/%s", strings.Join(c.raft.PeerAddresses(), ","), key)
 	c.logger.Infof("Boot additional servers with `-cluster %s`", c.Cluster)
-	ioutil.WriteFile(path.Join(c.DataDir, "/cluster"), []byte(c.Cluster), 0600)
+	ioutil.WriteFile(path.Join(c.DataDir, "cluster"), []byte(c.Cluster), 0600)
 
 	gatewayAddr := fmt.Sprintf("%s:%d", c.Address, c.GatewayPort)
 	c.logger.Infof("Serving gRPC gateway on %s://%s", proto, gatewayAddr)

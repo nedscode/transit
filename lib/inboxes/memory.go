@@ -214,7 +214,7 @@ func (i *MemoryInbox) Next(sub Subscriber) *transit.Entry {
 }
 
 // Ack marks the given item as completed and allows it to be eventually removed from the inbox.
-func (i *MemoryInbox) Ack(id uint64) {
+func (i *MemoryInbox) Ack(id uint64) bool {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -245,4 +245,6 @@ func (i *MemoryInbox) Ack(id uint64) {
 	if advance > 0 {
 		i.head = (i.head + advance) % i.capacity
 	}
+
+	return s != nil
 }

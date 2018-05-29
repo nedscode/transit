@@ -20,13 +20,13 @@ It can even automatically assign allotments to certain subscribers to smartly di
 
 While the usages are nearly limitless, the following may serve as an example of a few of the possibilities:
 
-##### Prioritising messages:
+#### Prioritising messages:
 
 You can have messages inserted with allotments of "high priority" and "normal priority", and have 2 subscriptions, one which selects the high priority only messages, and one which selects all priorities.
 
 When a high priority message comes through, you will be able to process them first.
 
-##### Debouncing noisy messages:
+#### Debouncing noisy messages:
 
 Subscribing with a delay on your subscription and a deliver strategy of "ignore" will allow you to filter out noisy messages until they quiet down.
 
@@ -40,7 +40,7 @@ If another message arrives with the same identity into the queue within the same
 
 You won't get alerted until it's been waiting for more than 500ms without a duplicate arriving.
 
-##### Preventing race conditions:
+#### Preventing race conditions:
 
 Say you have a process where processing items simultaneously can be dangerous and cause race conditions.
 
@@ -48,7 +48,7 @@ If you created a queue with a delivery policy of Serial, and make sure that the 
 
 An example of this is you could set the identity for a message to be the client id, thus enforcing that only one message per client is processed at once.
 
-##### Load balancing messages:
+#### Load balancing messages:
 
 Say you have a bunch of processes each of which can process arbitrary messages, but requires it to load a large set of data for a particular event. When you are processing subsequent messages, you would like future messages for the given event to go back to the service that already has the data loaded as it will be faster at processing it.
 

@@ -22,9 +22,9 @@
     }
   },
   "paths": {
-    "/api/v1/ack/{prefix}/{group}/{id}": {
+    "/api/v1/ack/{sub.prefix}/{sub.group}/{sub.id}": {
       "get": {
-        "summary": "Ack acknowledges the successful receipt and processing of a message id.\nAcknowledging a message allows you to receive a new message.",
+        "summary": "Ack acknowledges the successful receipt and processing of a message id.\nAcknowledging a message causes you to receive a new message.",
         "operationId": "Ack",
         "responses": {
           "200": {
@@ -36,31 +36,36 @@
         },
         "parameters": [
           {
-            "name": "prefix",
+            "name": "sub.prefix",
             "in": "path",
             "required": true,
             "type": "string"
           },
           {
-            "name": "group",
+            "name": "sub.group",
             "in": "path",
             "required": true,
             "type": "string"
           },
           {
-            "name": "id",
+            "name": "sub.id",
             "in": "path",
             "required": true,
             "type": "integer",
             "format": "uint64"
+          },
+          {
+            "name": "close",
+            "description": "Close causes the subscription to be terminated without receiving a new message.",
+            "in": "query",
+            "required": false,
+            "type": "boolean",
+            "format": "boolean"
           }
         ],
         "tags": [
           "Transit"
-        ],
-        "security": {
-          "auth": []
-        }
+        ]
       }
     },
     "/api/v1/ping/{id}": {
@@ -85,12 +90,14 @@
           },
           {
             "name": "leader",
+            "description": "Leader is the current cluster leader to whom all commands other than Ping must be sent.",
             "in": "query",
             "required": false,
             "type": "string"
           },
           {
             "name": "leading",
+            "description": "Leading is true if the pinged server is the leader.",
             "in": "query",
             "required": false,
             "type": "boolean",
@@ -162,6 +169,7 @@
           },
           {
             "name": "allotments",
+            "description": "Allotments contains a list of strings to match against `Entry.Lot`.\nIf the entry matches one of your Allotments, you will receive the message.\nEntries are shared amongst all subscribers that specify the matching Lot.",
             "in": "query",
             "required": false,
             "type": "array",
@@ -171,21 +179,31 @@
           },
           {
             "name": "delay",
+            "description": "Delay specifies a minimum number of milliseconds before an entry becomes deliverable to you.",
             "in": "query",
             "required": false,
-            "type": "string",
+            "type": "integer",
             "format": "uint64"
           },
           {
             "name": "max_age",
+            "description": "MaxAge specifies a maximum number of milliseconds after which you're not interested in a message any more.",
             "in": "query",
             "required": false,
-            "type": "string",
+            "type": "integer",
             "format": "uint64"
           },
           {
+            "name": "no_data",
+            "description": "NoData indicates that you're not interested in the content of the message, and not to send it.\nSpecify this option to save bandwidth if you only care about knowing a topic happend not what it's about.",
+            "in": "query",
+            "required": false,
+            "type": "boolean",
+            "format": "boolean"
+          },
+          {
             "name": "distribution",
-            "description": " - Arbitrary: Arbitrary distribution means that any processor may get any message.\n - Requested: Requested distribution limits messages to processors that have requested type of the specific lot.\n - Assigned: Assigned distribution will assign unrequested lots to processors based on load.",
+            "description": "Distribution specifies what additional messages you want to receive other than your Allotted messages.\n\n - Arbitrary: Arbitrary distribution means that any processor may get any message.\n - Requested: Requested distribution limits messages to processors that have requested type of the specific lot.\n - Assigned: Assigned distribution will assign unrequested lots to processors based on load.",
             "in": "query",
             "required": false,
             "type": "string",
@@ -198,7 +216,7 @@
           },
           {
             "name": "delivery",
-            "description": " - Concurrent: Concurrent messages are not treated specially.\n - Drop: Drop means if there's currently one waiting, don't bother with this one and drop it.\n - Replace: Replace means if there's currently one waiting, replace it with this one.\n - Ignore: Ignore means if there's currently one waiting, delete it and place this one at the back of the queue.\n - Serial: A Serial message will not begin processing a duplicate identity message at the same time as another.",
+            "description": "Delivery specifies how you want duplicate entries in the queue to be dealt with (queue-wide option).\n\n - Concurrent: Concurrent messages are not treated specially.\n - Drop: Drop means if there's currently one waiting, don't bother with this one and drop it.\n - Replace: Replace means if there's currently one waiting, replace it with this one.\n - Ignore: Ignore means if there's currently one waiting, delete it and place this one at the back of the queue.\n - Serial: A Serial message will not begin processing a duplicate identity message at the same time as another.",
             "in": "query",
             "required": false,
             "type": "string",
@@ -227,9 +245,11 @@
       "properties": {
         "success": {
           "type": "boolean",
-          "format": "boolean"
+          "format": "boolean",
+          "description": "Success is set to true if the entry was acked successfully and false if not found or already acked."
         }
-      }
+      },
+      "description": "Acked is the result of an Acking of a Sub."
     },
     "Command": {
       "type": "object",
@@ -278,71 +298,89 @@
       "properties": {
         "id": {
           "type": "integer",
-          "format": "uint64"
+          "format": "uint64",
+          "description": "ID is the global ID that is assigned to the entry.\nThis will be assigned by the server and any value you specify will be ignored."
         },
         "topic": {
-          "type": "string"
+          "type": "string",
+          "description": "Topic is a dot-separated hierarchical list of keywords that may be matched by subscription prefixes.\nFor example \"account.balance.deposit\" may be subscribed via \"account\" if someone wants to see all\naccount actions, or \"account.balance\" if they are only interested in balance affecting actions."
         },
         "lot": {
-          "type": "string"
+          "type": "string",
+          "description": "Lot defines a batch of items that belong together and can be subscribed to by using `Subscription.Allotments`.\nFor example if the Lot is a branch ID, you could have a process that subscribes to messages for several branches."
         },
         "identity": {
-          "type": "string"
+          "type": "string",
+          "description": "Identity is a string that identifies this message as unique to the specific topic.\nA delivery strategy may be defined for a queue that indicates how to deal with duplicate items."
         },
         "message": {
-          "$ref": "#/definitions/protobufAny"
+          "$ref": "#/definitions/protobufAny",
+          "description": "Message contains the item that you want to send to subscribers detailing the entry."
         },
         "not_before": {
           "type": "integer",
-          "format": "uint64"
+          "format": "uint64",
+          "description": "NotBefore indicates that the message will only be deliverable on or after the given milliseconds since epoch."
         },
         "not_after": {
           "type": "integer",
-          "format": "uint64"
+          "format": "uint64",
+          "description": "NotAfter indicates that the message will be removed from all queues after the given milliseconds since epoch."
         },
         "meta": {
           "type": "object",
           "additionalProperties": {
             "type": "string"
-          }
+          },
+          "description": "Meta contains additional custom metadata (other than message) that will be delivered with the message.\nNote: Meta is delivered even if `Subscription.NoData` is specified by a subscriber."
         }
-      }
+      },
+      "description": "Entry represents a published entry in the message bus."
     },
     "Notification": {
       "type": "object",
       "properties": {
         "sub": {
-          "$ref": "#/definitions/Sub"
+          "$ref": "#/definitions/Sub",
+          "description": "Contains the subscription detail to pass to Ack when you're finished processing the notification."
         },
         "entry": {
-          "$ref": "#/definitions/Entry"
+          "$ref": "#/definitions/Entry",
+          "description": "Entry is the item you're being notified about."
         }
-      }
+      },
+      "description": "Notification is given to subscribers when a new message is available for them."
     },
     "Pong": {
       "type": "object",
       "properties": {
         "id": {
           "type": "integer",
-          "format": "uint64"
+          "format": "uint64",
+          "description": "ID is an incrementing ID indicating the most recently allocated Entry ID."
         },
         "leader": {
-          "type": "string"
+          "type": "string",
+          "description": "Leader is the current cluster leader to whom all commands other than Ping must be sent."
         },
         "leading": {
           "type": "boolean",
-          "format": "boolean"
+          "format": "boolean",
+          "description": "Leading is true if the pinged server is the leader."
         }
-      }
+      },
+      "description": "Pong is used by Ping to check the server is alive and who the current leader is."
     },
     "Publication": {
       "type": "object",
       "properties": {
         "id": {
           "type": "integer",
-          "format": "uint64"
+          "format": "uint64",
+          "description": "ID is the internally assigned ID for your submitted Entry."
         }
-      }
+      },
+      "description": "Publication is returned from a call to Publish."
     },
     "String": {
       "type": "object",
@@ -367,16 +405,20 @@
       "type": "object",
       "properties": {
         "prefix": {
-          "type": "string"
+          "type": "string",
+          "description": "Prefix is the topic prefix that the subscriber subscribed to."
         },
         "group": {
-          "type": "string"
+          "type": "string",
+          "description": "Group is the group that the message was delivered to."
         },
         "id": {
           "type": "integer",
-          "format": "uint64"
+          "format": "uint64",
+          "description": "ID is the ID from the delivered entry."
         }
-      }
+      },
+      "description": "Sub is provided to a subscriber in the notification and defines which entry in which inbox should be marked as\ndelivered when the Sub is Acked."
     },
     "Success": {
       "type": "object",

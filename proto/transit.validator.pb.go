@@ -13,6 +13,7 @@ It has these top-level messages:
 	Entry
 	Subscription
 	Notification
+	Acknowledgement
 	Sub
 	Acked
 	ApplyCommands
@@ -44,9 +45,6 @@ var _ = fmt.Errorf
 var _ = math.Inf
 
 func (this *Pong) Validate() error {
-	if !(this.ID > 0) {
-		return go_proto_validators.FieldError("ID", fmt.Errorf(`ID must a positive integer`))
-	}
 	return nil
 }
 func (this *Publication) Validate() error {
@@ -79,6 +77,14 @@ func (this *Notification) Validate() error {
 	if this.Entry != nil {
 		if err := go_proto_validators.CallValidatorIfExists(this.Entry); err != nil {
 			return go_proto_validators.FieldError("Entry", err)
+		}
+	}
+	return nil
+}
+func (this *Acknowledgement) Validate() error {
+	if this.Sub != nil {
+		if err := go_proto_validators.CallValidatorIfExists(this.Sub); err != nil {
+			return go_proto_validators.FieldError("Sub", err)
 		}
 	}
 	return nil

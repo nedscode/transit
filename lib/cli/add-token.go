@@ -6,6 +6,7 @@ import (
 
 	"google.golang.org/grpc"
 
+	"github.com/nedscode/transit/lib/server"
 	"github.com/nedscode/transit/proto"
 )
 
@@ -19,14 +20,13 @@ func (c *Config) addTokenCommand(args []string) (cb afterFunc, err error) {
 		return
 	}
 
-	switch args[0] {
-	case "owner", "publisher", "subscriber":
-	default:
-		fmt.Printf(`Invalid role (%q), must be one of "owner", "publisher", "subscriber"\n`, args[1])
+	role := args[0]
+	if !server.AssignableRoles[role] {
+		validRoles := strings.Join(server.AssignableRolesList, ", ")
+		fmt.Printf("Invalid role (%q), must be one of: %s\n", role, validRoles)
 		return
 	}
 
-	role := args[0]
 	name := strings.Join(args[1:], " ")
 
 	cb = c.withLeader(c.addToken(role, name))

@@ -29,7 +29,7 @@ type InboxFactory func() Inbox
 type Inbox interface {
 	Add(entry *transit.Entry) bool
 	Next(sub Subscriber) *transit.Entry
-	Ack(id uint64)
+	Ack(id uint64) bool
 }
 
 type inboxDetail struct {
@@ -87,12 +87,26 @@ func (i *Inboxes) Add(entry *transit.Entry) {
 	}
 }
 
+func (i *Inboxes) Ack(ack *transit.Acknowledgement) bool {
+	if ack.Sub == nil {
+		return false
+	}
+
+	box := i.getInbox(ack.Sub.Prefix, ack.Sub.Group)
+	if box == nil {
+		return false
+	}
+
+	return box.Ack(ack.Sub.ID)
+}
+
+
 // Cheap method to get a preexisting inbox using only a read lock.
-func (i *Inboxes) getInbox(topic, group string) (inbox *inboxDetail) {
+func (i *Inboxes) getInbox(prefix, group string) (inbox *inboxDetail) {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
 
-	key := fmt.Sprintf("%s/%s", topic, group)
+	key := fmt.Sprintf("%s/%s", prefix, group)
 	if b, ok := i.boxes[key]; ok {
 		inbox = b
 	}
@@ -100,7 +114,7 @@ func (i *Inboxes) getInbox(topic, group string) (inbox *inboxDetail) {
 }
 
 // Method to get or create an inbox, but uses a write lock to do so.
-func (i *Inboxes) createInbox(topic, group string, factory InboxFactory) (inbox *inboxDetail) {
+func (i *Inboxes) createInbox(prefix, group string, factory InboxFactory) (inbox *inboxDetail) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -108,14 +122,14 @@ func (i *Inboxes) createInbox(topic, group string, factory InboxFactory) (inbox 
 		factory = i.factory
 	}
 
-	key := fmt.Sprintf("%s/%s", topic, group)
+	key := fmt.Sprintf("%s/%s", prefix, group)
 	inbox, ok := i.boxes[key]
 	if !ok {
 		now := time.Now()
 		inbox = &inboxDetail{
 			Inbox: factory(),
 
-			topic: topic,
+			topic: prefix,
 			group: group,
 
 			created:    now,

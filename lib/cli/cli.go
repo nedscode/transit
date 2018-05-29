@@ -80,21 +80,21 @@ func (c *Config) Parse() {
 	}
 
 	if c.Address == "" {
-		data, err := ioutil.ReadFile(path.Join(c.DataDir, "/address"))
+		data, err := ioutil.ReadFile(path.Join(c.DataDir, "address"))
 		if err == nil {
 			c.Address = string(data)
 		}
 	} else {
-		ioutil.WriteFile(path.Join(c.DataDir, "/address"), []byte(c.Address), 0644)
+		ioutil.WriteFile(path.Join(c.DataDir, "address"), []byte(c.Address), 0644)
 	}
 
 	if c.Cluster == "" {
-		data, err := ioutil.ReadFile(path.Join(c.DataDir, "/cluster"))
+		data, err := ioutil.ReadFile(path.Join(c.DataDir, "cluster"))
 		if err == nil {
 			c.Cluster = string(data)
 		}
 	} else {
-		ioutil.WriteFile(path.Join(c.DataDir, "/cluster"), []byte(c.Cluster), 0600)
+		ioutil.WriteFile(path.Join(c.DataDir, "cluster"), []byte(c.Cluster), 0600)
 	}
 
 	if c.Cluster == "boot" {
@@ -144,7 +144,9 @@ func (c *Config) Exec(command string, args []string) (err error) {
 		return err
 	}
 
-	err = after()
+	if after != nil {
+		err = after()
+	}
 	return
 }
 

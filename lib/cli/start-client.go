@@ -86,8 +86,7 @@ func (c *Config) connectNode(peers []string, key string, wantLeader bool) (conn 
 					return
 				}
 				if leading {
-					// If the node thinks it's the leader...
-					err = c.joinCluster(client, key)
+					// If this node thinks it's the leader, then we've arrived
 					if err == nil {
 						c.logger.Info("found a leader node")
 						return

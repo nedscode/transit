@@ -12,13 +12,13 @@ option go_package = "github.com/nedscode/transit/proto;transit";
 
 option (grpc.gateway.protoc_gen_swagger.options.openapiv2_swagger) = {
   info: {
-    version: "1.0";
-  };
-external_docs:{
-url:"https://github.com/nedscode/transit";
-description:"Transit server repository";
-}
-schemes:HTTPS;
+    version: "1.0"
+  }
+  external_docs: {
+    url:"https://github.com/nedscode/transit"
+    description:"Transit server repository"
+  }
+  schemes: HTTPS
 };
 
 option (gogoproto.goproto_registration) = true;
@@ -47,10 +47,10 @@ service Transit {
     }
 
     // Ack acknowledges the successful receipt and processing of a message id.
-    // Acknowledging a message allows you to receive a new message.
-    rpc Ack(Sub) returns (Acked) {
+    // Acknowledging a message causes you to receive a new message.
+    rpc Ack(Acknowledgement) returns (Acked) {
         option (google.api.http) = {
-            get: "/api/v1/ack/{prefix}/{group}/{id}"
+            get: "/api/v1/ack/{sub.prefix}/{sub.group}/{sub.id}"
         };
     }
 
@@ -92,19 +92,21 @@ enum DeliveryStrategy {
     Serial = 4;
 }
 
+// Pong is used by Ping to check the server is alive and who the current leader is.
 message Pong {
+    // ID is an incrementing ID indicating the most recently allocated Entry ID.
     uint64 id = 1 [
-        (gogoproto.customname) = "ID",
-        (validator.field) = {
-            int_gt: 0
-            human_error: "ID must a positive integer"
-        }
+        (gogoproto.customname) = "ID"
     ];
+    // Leader is the current cluster leader to whom all commands other than Ping must be sent.
     string leader = 2;
+    // Leading is true if the pinged server is the leader.
     bool leading = 3;
 }
 
+// Publication is returned from a call to Publish.
 message Publication {
+    // ID is the internally assigned ID for your submitted Entry.
     uint64 id = 1 [
         (gogoproto.customname) = "ID",
         (validator.field) = {
@@ -113,57 +115,108 @@ message Publication {
     }];
 }
 
+// Entry represents a published entry in the message bus.
 message Entry {
+    // ID is the global ID that is assigned to the entry.
+    // This will be assigned by the server and any value you specify will be ignored.
     uint64 id = 1 [
         (gogoproto.customname) = "ID"
     ];
 
+    // Topic is a dot-separated hierarchical list of keywords that may be matched by subscription prefixes.
+    // For example "account.balance.deposit" may be subscribed via "account" if someone wants to see all
+    // account actions, or "account.balance" if they are only interested in balance affecting actions.
     string topic = 5 [
         (validator.field) = {
             string_not_empty: true
             human_error: "A topic must be supplied"
         }
     ];
+    // Lot defines a batch of items that belong together and can be subscribed to by using `Subscription.Allotments`.
+    // For example if the Lot is a branch ID, you could have a process that subscribes to messages for several branches.
     string lot = 6;
+    // Identity is a string that identifies this message as unique to the specific topic.
+    // A delivery strategy may be defined for a queue that indicates how to deal with duplicate items.
     string identity = 7;
 
+    // Message contains the item that you want to send to subscribers detailing the entry.
     google.protobuf.Any message = 10;
 
+    // NotBefore indicates that the message will only be deliverable on or after the given milliseconds since epoch.
     uint64 not_before = 20;
+    // NotAfter indicates that the message will be removed from all queues after the given milliseconds since epoch.
     uint64 not_after = 21;
 
+    // Meta contains additional custom metadata (other than message) that will be delivered with the message.
+    // Note: Meta is delivered even if `Subscription.NoData` is specified by a subscriber.
     map<string,string> meta = 90;
 }
 
+// Subscription indicates what a process wishes to subscribe to and how it wants the queue configured.
 message Subscription {
+    // Prefix is the topic prefix you wish to subscribe to.
+    // Prefix must match a complete segment prefix to allow you to receive the messages.
     string prefix = 1;
+    // Group is your group name all subscribers with the same group name will share the processing of the messages.
     string group = 2;
 
+    // Allotments contains a list of strings to match against `Entry.Lot`.
+    // If the entry matches one of your Allotments, you will receive the message.
+    // Entries are shared amongst all subscribers that specify the matching Lot.
     repeated string allotments = 10;
 
+    // Delay specifies a minimum number of milliseconds before an entry becomes deliverable to you.
     uint64 delay = 20;
+    // MaxAge specifies a maximum number of milliseconds after which you're not interested in a message any more.
     uint64 max_age = 21;
 
-    DistributionStrategy distribution = 30;
-    DeliveryStrategy delivery = 31;
+    // NoData indicates that you're not interested in the content of the message, and not to send it.
+    // Specify this option to save bandwidth if you only care about knowing a topic happend not what it's about.
+    bool no_data = 40;
+
+    // Distribution specifies what additional messages you want to receive other than your Allotted messages.
+    DistributionStrategy distribution = 80;
+    // Delivery specifies how you want duplicate entries in the queue to be dealt with (queue-wide option).
+    DeliveryStrategy delivery = 81;
 }
 
+// Notification is given to subscribers when a new message is available for them.
 message Notification {
+    // Contains the subscription detail to pass to Ack when you're finished processing the notification.
     Sub sub = 1;
+    // Entry is the item you're being notified about.
     Entry entry = 2;
 }
 
+// Acknowlegement is sent to the sever via the `Ack` command to indicate that you are finished with the given entry
+// and wish to receive another.
+message Acknowledgement {
+    // Sub is the subscription you are acknowedging, you get this from the Notification.
+    Sub sub = 1;
+    // Close causes the subscription to be terminated without receiving a new message.
+    bool close = 2;
+}
+
+// Sub is provided to a subscriber in the notification and defines which entry in which inbox should be marked as
+// delivered when the Sub is Acked.
 message Sub {
+    // Prefix is the topic prefix that the subscriber subscribed to.
     string prefix = 1;
+    // Group is the group that the message was delivered to.
     string group = 2;
+    // ID is the ID from the delivered entry.
     uint64 id = 3 [
         (gogoproto.customname) = "ID"
     ];
 }
 
+// Acked is the result of an Acking of a Sub.
 message Acked {
+    // Success is set to true if the entry was acked successfully and false if not found or already acked.
     bool success = 1;
 }
+
+// Internal cluster commands follow...
 
 message ApplyCommands {
     repeated Command commands = 1;

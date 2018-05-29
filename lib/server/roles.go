@@ -11,6 +11,28 @@ import (
 	"github.com/nedscode/transit/proto"
 )
 
+const (
+	RoleEmpty      = ""
+	RoleOwner      = "owner"
+	RolePublisher  = "publisher"
+	RoleSubscriber = "subscriber"
+	RoleCluster    = "cluster"
+	RoleAnonymous  = "anonymous"
+)
+
+var (
+	AssignableRolesList = []string{
+		RoleOwner, RolePublisher, RoleSubscriber,
+	}
+	AssignableRoles = map[string]bool{}
+)
+
+func init() {
+	for _, v := range AssignableRolesList {
+		AssignableRoles[v] = true
+	}
+}
+
 type otp struct {
 	mu        sync.Mutex
 	curTime   int64
@@ -172,21 +194,21 @@ func (b *Backend) requireCluster(ctx context.Context) error {
 	return permissionError
 }
 
-func (b *Backend) requireRoles(ctx context.Context, roles ...string) (string, error) {
+func (b *Backend) requireRoles(ctx context.Context, roles ...string) (string, string, error) {
 	tokenMeta := tokensFromContext(ctx)
 	if len(tokenMeta) == 0 {
 		if len(roles) == 0 {
-			return "anonymous", nil
+			return "Anonymous", RoleAnonymous, nil
 		}
 
-		return "", unauthenticatedError
+		return "", RoleEmpty, unauthenticatedError
 	}
 
 	// Cluster key is automatically allowed to access everything.
 	clusterKey := b.store.Key()
 	for _, k := range tokenMeta {
 		if len(k) == 48 && k == clusterKey {
-			return "cluster", nil
+			return "Cluster", RoleCluster, nil
 		}
 	}
 
@@ -208,7 +230,7 @@ func (b *Backend) requireRoles(ctx context.Context, roles ...string) (string, er
 						matches = true
 					} else {
 						for _, r := range roles {
-							if r == tokenRole {
+							if string(r) == tokenRole {
 								matches = true
 								break
 							}
@@ -225,7 +247,7 @@ func (b *Backend) requireRoles(ctx context.Context, roles ...string) (string, er
 							if compare == authToken {
 								// This is a valid Auth token, last thing is the replay protection check
 								if b.otp.get(pk).ratchet(ts, nonce) {
-									return tokenName, nil
+									return tokenName, tokenRole, nil
 								}
 							}
 						} else {
@@ -238,16 +260,16 @@ func (b *Backend) requireRoles(ctx context.Context, roles ...string) (string, er
 	}
 
 	if len(roles) == 0 {
-		return "anonymous", nil
+		return "Anonymous", RoleAnonymous, nil
 	}
 
 	if invalid {
-		return "", invalidTokenError
+		return "", RoleEmpty, invalidTokenError
 	}
 
 	if !tested {
-		return "", unauthenticatedError
+		return "", RoleEmpty, unauthenticatedError
 	}
 
-	return "", permissionError
+	return "", RoleEmpty, permissionError
 }

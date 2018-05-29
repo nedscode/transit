@@ -12,6 +12,7 @@ import (
 
 	"github.com/nedscode/transit/lib/raft"
 	"github.com/nedscode/transit/proto"
+	"github.com/nedscode/transit/lib/inboxes"
 )
 
 // Backend is a TransitServer handler
@@ -19,6 +20,7 @@ type Backend struct {
 	mu     *sync.RWMutex
 	logger logrus.FieldLogger
 	store  *raft.Store
+	inbox  *inboxes.Inboxes
 	otp    *otpStore
 }
 
@@ -37,6 +39,7 @@ func New(logger logrus.FieldLogger, store *raft.Store) *Backend {
 		mu:     &sync.RWMutex{},
 		logger: logger,
 		store:  store,
+		inbox:  inboxes.New(nil),
 		otp:    &otpStore{times: map[string]*otp{}},
 	}
 }
@@ -45,7 +48,7 @@ func New(logger logrus.FieldLogger, store *raft.Store) *Backend {
 func (b *Backend) Ping(ctx context.Context, ping *transit.Pong) (*transit.Pong, error) {
 	logger := b.logger.WithField("rpc", "ping")
 
-	tokenName, err := b.requireRoles(ctx)
+	tokenName, _, err := b.requireRoles(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -71,18 +74,27 @@ func (b *Backend) Publish(ctx context.Context, e *transit.Entry) (*transit.Publi
 
 	logger := b.logger.WithField("rpc", "publish")
 
-	tokenName, err := b.requireRoles(ctx, "owner", "publisher")
+	tokenName, _, err := b.requireRoles(ctx, RoleOwner, RolePublisher)
 	if err != nil {
 		return nil, err
 	}
 	logger = logger.WithField("tokenName", tokenName)
 	logger = logger.WithField("entry", e)
 
+	b.inbox.Add(e)
 	ret := &transit.Publication{
-		ID: 1, // TODO actual pub ID
+		ID: e.ID,
 	}
 	logger.WithField("ret", ret).Info("Publishing entry")
 	return ret, nil
+}
+
+type subscriber struct {
+
+}
+
+func (s *subscriber) CanAccept(e *transit.Entry) bool {
+	return true
 }
 
 // Subscribe takes topic and group details and returns a subscription stream.
@@ -93,7 +105,7 @@ func (b *Backend) Subscribe(d *transit.Subscription, s transit.Transit_Subscribe
 
 	logger := b.logger.WithField("rpc", "subscribe")
 
-	tokenName, err := b.requireRoles(s.Context(), "owner", "publisher", "subscriber")
+	tokenName, _, err := b.requireRoles(s.Context(), RoleOwner, RolePublisher, RoleSubscriber)
 	if err != nil {
 		return err
 	}
@@ -106,14 +118,14 @@ func (b *Backend) Subscribe(d *transit.Subscription, s transit.Transit_Subscribe
 
 // Ack acknowledges the successful receipt and processing of a message id.
 // Acknowledging a message allows you to receive a new message.
-func (b *Backend) Ack(ctx context.Context, p *transit.Sub) (*transit.Acked, error) {
+func (b *Backend) Ack(ctx context.Context, p *transit.Acknowledgement) (*transit.Acked, error) {
 	if !b.store.Leading() {
 		return nil, notLeaderError
 	}
 
 	logger := b.logger.WithField("rpc", "ack")
 
-	tokenName, err := b.requireRoles(ctx, "owner", "publisher", "subscriber")
+	tokenName, _, err := b.requireRoles(ctx, RoleOwner, RolePublisher, RoleSubscriber)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +165,9 @@ func (b *Backend) ClusterApply(ctx context.Context, a *transit.ApplyCommands) (*
 			Compare:   c.Compare,
 			Versus:    c.Versus,
 		})
-		errs = append(errs, err.Error())
+		if err != nil {
+			errs = append(errs, err.Error())
+		}
 	}
 
 	ret := &transit.Success{}

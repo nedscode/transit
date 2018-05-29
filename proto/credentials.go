@@ -49,7 +49,7 @@ func GetAuthTokenFor(token string, entropy string) (auth string, ts, nonce int64
 
 	if entropy == "" {
 		ts = now
-		nonce = time.Now().UnixNano() / 1000000000
+		nonce = time.Now().UnixNano() % 1000000000
 
 		hexTime = strconv.FormatInt(ts, 16)
 		hexNonce = strconv.FormatInt(nonce, 16)
