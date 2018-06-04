@@ -1,6 +1,7 @@
 package inboxes
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -9,7 +10,7 @@ import (
 	"github.com/nedscode/transit/proto"
 )
 
-func findIn(in []*transit.Entry, x *transit.Entry) int {
+func findIn(in []*EntryWrap, x *EntryWrap) int {
 	for i, e := range in {
 		if e == x {
 			return i
@@ -18,7 +19,7 @@ func findIn(in []*transit.Entry, x *transit.Entry) int {
 	return -1
 }
 
-func getOrder(base []*transit.Entry, from []*transit.Entry) string {
+func getOrder(base []*EntryWrap, from []*EntryWrap) string {
 	order := make([]string, len(from))
 	for i, x := range from {
 		n := findIn(base, x)
@@ -32,8 +33,8 @@ func getOrder(base []*transit.Entry, from []*transit.Entry) string {
 }
 
 func TestMemoryGrow(t *testing.T) {
-	in := NewMemoryInbox(10, 100)
-	base := []*transit.Entry{{}, {}, {}, {}, {}, {}, {}, {}, {}, {}}
+	in := NewMemoryInbox(context.Background(), 10, 100)
+	base := []*EntryWrap{{}, {}, {}, {}, {}, {}, {}, {}, {}, {}}
 
 	copy(in.items, base)
 	oh := uint64(2)
@@ -79,8 +80,8 @@ func TestMemoryGrow(t *testing.T) {
 }
 
 func TestMemoryGrowWrap(t *testing.T) {
-	in := NewMemoryInbox(10, 100)
-	base := []*transit.Entry{{}, {}, {}, {}, {}, {}, {}, {}, {}, {}}
+	in := NewMemoryInbox(context.Background(), 10, 100)
+	base := []*EntryWrap{{}, {}, {}, {}, {}, {}, {}, {}, {}, {}}
 
 	copy(in.items, base)
 	oh := uint64(5)
@@ -128,7 +129,7 @@ func TestMemoryGrowWrap(t *testing.T) {
 
 type wildSubscriber struct{}
 
-func (*wildSubscriber) CanAccept(entry *transit.Entry) bool {
+func (*wildSubscriber) CanAccept(entry *EntryWrap) bool {
 	fmt.Printf("checking accept on %#v\n", entry)
 	return true
 }
@@ -137,19 +138,20 @@ func TestMemoryInbox(t *testing.T) {
 	topic := "foo.bar.baz"
 	identity := "123"
 
-	in := NewMemoryInbox(100, 1000)
-	ib := New(nil)
+	in := NewMemoryInbox(context.Background(), 100, 1000)
+	ib := New(context.Background(), nil, SyncNone)
 	ib.boxes[topic] = &inboxDetail{
 		Inbox: in,
 		topic: topic,
 		group: "test",
 	}
 
-	ib.Add(&transit.Entry{
+	ib.Add(Wrap(&transit.Entry{
 		Topic:    topic,
 		Identity: identity,
-	})
-	entry := in.Next(&wildSubscriber{})
+	}))
+
+	entry, _ := in.Next(&wildSubscriber{})
 
 	if entry == nil {
 		t.Fatal("expected to have a next item")

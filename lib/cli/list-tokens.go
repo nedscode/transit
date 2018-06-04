@@ -15,8 +15,9 @@ func init() {
 
 func (c *Config) listTokens() error {
 	fmt.Println("Tokens:")
-	fmt.Printf("  %-12s  %-10s  %s\n", "Public Key", "Role", "Name")
-	fmt.Printf("  %-12s  %-10s  %s\n", "------------", "----------", "----------------")
+	fmt.Println("")
+	fmt.Printf("%-12s  %-10s  %s\n", "Public Key", "Role", "Name")
+	fmt.Printf("%-12s  %-10s  %s\n", "------------", "----------", "----------------")
 
 	pkk := map[string]bool{}
 	ctx, cancel := c.timeout()

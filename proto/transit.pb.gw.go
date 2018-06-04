@@ -64,7 +64,7 @@ func request_Transit_Ping_0(ctx context.Context, marshaler runtime.Marshaler, cl
 }
 
 func request_Transit_Publish_0(ctx context.Context, marshaler runtime.Marshaler, client TransitClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq Entry
+	var protoReq Publication
 	var metadata runtime.ServerMetadata
 
 	if req.ContentLength > 0 {

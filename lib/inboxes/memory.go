@@ -1,6 +1,7 @@
 package inboxes
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -20,38 +21,33 @@ func MemoryInboxFactory(capacity, max uint64) InboxFactory {
 	if max < capacity {
 		max = capacity
 	}
-	return func() Inbox {
-		return NewMemoryInbox(capacity, max)
+	return func(ctx context.Context) Inbox {
+		return NewMemoryInbox(ctx, capacity, max)
 	}
 }
 
-type inboxState uint8
-
-const (
-	// Ready indicates the item is ready to be delivered to a recipient.
-	Ready inboxState = 1 << iota
-	// Sent indicates the item has been sent and is waiting to be acked.
-	Sent
-	// Acked indicates that the item has been processed and can be removed.
-	Acked
-)
-
 // NewMemoryInbox creates a new MemoryInbox.
-func NewMemoryInbox(capacity, max uint64) *MemoryInbox {
+func NewMemoryInbox(ctx context.Context, capacity, max uint64) *MemoryInbox {
 	return &MemoryInbox{
-		items:    make([]*transit.Entry, capacity),
-		states:   make([]inboxState, capacity),
+		ctx:      ctx,
+		items:    make([]*EntryWrap, capacity),
+		states:   make([]State, capacity),
+		changes:  make([]chan bool, capacity),
 		capacity: capacity,
 		step:     capacity / 2,
 		max:      max,
+		avail:    make(chan *struct{}),
 	}
 }
 
 // MemoryInbox is a memory based inbox for super high speed throughput.
 type MemoryInbox struct {
+	ctx context.Context
+
 	// Circular list of items, auto grows `capacity` (by `step`) to `max` capacity.
-	items  []*transit.Entry
-	states []inboxState
+	items   []*EntryWrap
+	states  []State
+	changes []chan bool
 
 	mu       sync.Mutex
 	capacity uint64
@@ -60,7 +56,11 @@ type MemoryInbox struct {
 	head     uint64
 	tail     uint64
 	alive    uint64
+
+	avail chan *struct{}
 }
+
+var _ Inbox = (*MemoryInbox)(nil)
 
 func (i *MemoryInbox) grow() bool {
 	// As part of growing, we need to choose between making the queue larger or compacting the existing items.
@@ -92,8 +92,9 @@ func (i *MemoryInbox) grow() bool {
 		return false
 	}
 
-	itemsBuf := make([]*transit.Entry, bufCap)
-	statesBuf := make([]inboxState, bufCap)
+	itemsBuf := make([]*EntryWrap, bufCap)
+	statesBuf := make([]State, bufCap)
+	changesBuf := make([]chan bool, bufCap)
 
 	if head == tail {
 		// Zero length list requires no copying
@@ -103,14 +104,17 @@ func (i *MemoryInbox) grow() bool {
 		// Simple copy (head->tail)
 		copy(itemsBuf, i.items[head:tail])
 		copy(statesBuf, i.states[head:tail])
+		copy(changesBuf, i.changes[head:tail])
 		i.head = 0
 		i.tail = tail - head
 	} else {
 		// Wraps around the end (head->cap + 0->tail)
 		copy(itemsBuf, i.items[head:cap])
 		copy(statesBuf, i.states[head:cap])
+		copy(changesBuf, i.changes[head:cap])
 		copy(itemsBuf[cap-head:bufCap], i.items[0:tail])
 		copy(statesBuf[cap-head:bufCap], i.states[0:tail])
+		copy(changesBuf[cap-head:bufCap], i.changes[0:tail])
 		i.head = 0
 		i.tail = cap - head + tail
 	}
@@ -121,11 +125,16 @@ func (i *MemoryInbox) grow() bool {
 
 func (i *MemoryInbox) compact() bool {
 	n := i.alive
-	itemsBuf := make([]*transit.Entry, n)
-	stateBuf := make([]inboxState, n)
+	itemsBuf := make([]*EntryWrap, n)
+	stateBuf := make([]State, n)
+	changesBuf := make([]chan bool, n)
 
 	pos := uint64(0)
-	i.iter(func(e *transit.Entry, s inboxState) bool {
+	for j := i.head; j < i.tail; j = (j + 1) % i.capacity {
+		e := i.items[j]
+		s := i.states[j]
+		c := i.changes[j]
+
 		if pos >= n {
 			// This should never happen... if it does, someone's messed up.
 			fmt.Printf("Items: %#v\n", i.items)
@@ -137,10 +146,10 @@ func (i *MemoryInbox) compact() bool {
 		if e != nil && s != Acked {
 			itemsBuf[pos] = e
 			stateBuf[pos] = s
+			changesBuf[pos] = c
 			pos++
 		}
-		return false
-	})
+	}
 
 	copy(i.items, itemsBuf)
 	copy(i.states, stateBuf)
@@ -150,7 +159,7 @@ func (i *MemoryInbox) compact() bool {
 }
 
 // Add inserts the entry into the inbox, growing it if required, returns false if the inbox is at maximum capacity.
-func (i *MemoryInbox) Add(entry *transit.Entry) bool {
+func (i *MemoryInbox) Add(entry *EntryWrap) bool {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -170,29 +179,37 @@ func (i *MemoryInbox) Add(entry *transit.Entry) bool {
 	i.items[t] = entry
 	i.states[t] = Ready
 	i.alive++
+	entry.CountInboxes++
 
 	i.tail = (t + 1) % i.capacity
+
+	select {
+	case i.avail <- nil:
+	default:
+	}
+
 	return true
 }
 
-type iterSelectorFunc func(e *transit.Entry, s inboxState) bool
-type itemSelectorFunc func(e *transit.Entry) bool
+type iterSelectorFunc func(*EntryWrap, State) bool
+type itemSelectorFunc func(*EntryWrap) bool
 
 // iterates over items in order until selector returns true, then returns the selected entry.
-func (i *MemoryInbox) iter(cb iterSelectorFunc) (j uint64, e *transit.Entry, s *inboxState) {
+func (i *MemoryInbox) iter(cb iterSelectorFunc) (j uint64, e *EntryWrap, s *State, c chan bool) {
 	for j = i.head; j < i.tail; j = (j + 1) % i.capacity {
 		e = i.items[j]
 		s = &i.states[j]
+		c = i.changes[j]
 		if cb(e, *s) {
 			return
 		}
 	}
-	return 0, nil, nil
+	return 0, nil, nil, nil
 }
 
 // takes an item selector function and calls it for any ready items
 func readyState(cb itemSelectorFunc) iterSelectorFunc {
-	return func(e *transit.Entry, s inboxState) bool {
+	return func(e *EntryWrap, s State) bool {
 		if s == Ready {
 			return cb(e)
 		}
@@ -201,31 +218,44 @@ func readyState(cb itemSelectorFunc) iterSelectorFunc {
 }
 
 // Next gets the next unsent item from the current list.
-func (i *MemoryInbox) Next(sub Subscriber) *transit.Entry {
-	i.mu.Lock()
-	defer i.mu.Unlock()
+func (i *MemoryInbox) Next(sub Subscriber) (*EntryWrap, <-chan bool) {
+	for {
+		e, c := func() (*EntryWrap, <-chan bool) {
+			i.mu.Lock()
+			defer i.mu.Unlock()
 
-	_, e, s := i.iter(readyState(sub.CanAccept))
-	if s != nil {
-		*s = Sent
+			_, e, s, c := i.iter(readyState(sub.CanAccept))
+
+			if s != nil {
+				*s = Sent
+			}
+
+			return e, c
+		}()
+
+		if e != nil {
+			return e, c
+		}
+
+		// Wait for an item to be made available.
+		select {
+		case <-i.avail:
+		case <-i.ctx.Done():
+			return nil, nil
+		}
 	}
-
-	return e
 }
 
-// Ack marks the given item as completed and allows it to be eventually removed from the inbox.
-func (i *MemoryInbox) Ack(id uint64) bool {
+// Ack updates the given item's completion status and allows it to be eventually removed from the inbox.
+func (i *MemoryInbox) Ack(a *transit.Acknowledgement) *EntryWrap {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
 	adjacent := true
 	advance := uint64(0)
-	_, _, s := i.iter(func(e *transit.Entry, s inboxState) bool {
-		if e.ID == id {
-			if adjacent {
-				advance++
-			}
-			return true // Stop processing
+	_, wrap, state, change := i.iter(func(e *EntryWrap, s State) bool {
+		if e.ID == a.Sub.ID {
+			return true // We've found the requested entry, stop processing.
 		}
 		if adjacent {
 			if s == Acked {
@@ -237,14 +267,40 @@ func (i *MemoryInbox) Ack(id uint64) bool {
 		return false
 	})
 
-	if s != nil {
-		*s = Acked
-		i.alive--
+	// Only a Sent item may be ACKed.
+	if state != nil && *state == Sent {
+		if a.Ack {
+			// Mark it as ACKed.
+			*state = Acked
+			i.alive--
+			wrap.CountAcked++
+			if adjacent {
+				advance++
+			}
+
+			// Notify that our state has changed, if anyone is listening
+			select {
+			case change <- !a.Close:
+			default:
+			}
+		} else {
+			// Needs to be marked as ready so it can be redelivered to another subscriber.
+			*state = Ready
+
+			// Notify that our state has changed, if anyone is listening
+			select {
+			case change <- !a.Close:
+			default:
+			}
+		}
 	}
 
 	if advance > 0 {
 		i.head = (i.head + advance) % i.capacity
 	}
 
-	return s != nil
+	if state == nil {
+		return nil
+	}
+	return wrap
 }

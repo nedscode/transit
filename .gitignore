@@ -1,5 +1,6 @@
 transit
 data/
+example/example
 admin/dist/
 admin/node_modules/
 admin/yarn.lock
@@ -7,3 +8,4 @@ admin/yarn-error.log
 static/admin/
 !static/admin/.gitkeep
 *.pem
+transit.swagger.json.orig

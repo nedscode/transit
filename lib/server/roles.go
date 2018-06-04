@@ -12,18 +12,32 @@ import (
 )
 
 const (
-	RoleEmpty      = ""
-	RoleOwner      = "owner"
-	RolePublisher  = "publisher"
+	// RoleEmpty is an empty role.
+	RoleEmpty = ""
+
+	// RoleOwner represents an owner role which will have most permissions.
+	RoleOwner = "owner"
+
+	// RolePublisher represents a publisher role which will have appropriate permissions to publish entries.
+	RolePublisher = "publisher"
+
+	// RoleSubscriber represents a subscriber role which will be able to receive subscriptions to entries.
 	RoleSubscriber = "subscriber"
-	RoleCluster    = "cluster"
-	RoleAnonymous  = "anonymous"
+
+	// RoleCluster represents a cluster member which can participate in a cluster and execute cluster commands.
+	RoleCluster = "cluster"
+
+	// RoleAnonymous represents an anonymous user's role.
+	RoleAnonymous = "anonymous"
 )
 
 var (
+	// AssignableRolesList is the list of roles which can be assigned to new tokens.
 	AssignableRolesList = []string{
 		RoleOwner, RolePublisher, RoleSubscriber,
 	}
+
+	// AssignableRoles is a mapping of the AssignableRolesList strings to boolean true values.
 	AssignableRoles = map[string]bool{}
 )
 
@@ -230,7 +244,7 @@ func (b *Backend) requireRoles(ctx context.Context, roles ...string) (string, st
 						matches = true
 					} else {
 						for _, r := range roles {
-							if string(r) == tokenRole {
+							if r == tokenRole {
 								matches = true
 								break
 							}
@@ -242,7 +256,7 @@ func (b *Backend) requireRoles(ctx context.Context, roles ...string) (string, st
 						if n := len(tokenParts); n == 4 {
 							hexTime := tokenParts[1]
 							hexNonce := tokenParts[2]
-							compare, ts, nonce := transit.GetAuthTokenFor(tokenMaster, fmt.Sprintf("%s-%s", hexTime, hexNonce))
+							compare, ts, nonce := transit.GetAuthTokenFor(tokenMaster, fmt.Sprintf("%s-%s", hexTime, hexNonce), 0)
 
 							if compare == authToken {
 								// This is a valid Auth token, last thing is the replay protection check

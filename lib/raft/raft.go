@@ -3,6 +3,7 @@ package raft
 // Based on reference implementation at https://github.com/otoolep/hraftd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -71,6 +72,38 @@ type storer interface {
 	raft.StableStore
 }
 
+type logrusAdaptor struct {
+	logger logrus.FieldLogger
+}
+
+func (l *logrusAdaptor) Write(p []byte) (n int, err error) {
+	line := bytes.SplitN(p, []byte{' '}, 4)
+	level := string(line[2])
+	text := line[3]
+
+	var prefix []byte
+	if c := bytes.Index(text, []byte{':'}); c > 0 && c+1 == bytes.Index(text, []byte{' '}) {
+		prefix = text[0:c]
+		text = text[c+1:]
+	}
+
+	logger := l.logger
+	if len(prefix) > 0 {
+		logger = logger.WithField("system", string(prefix))
+	}
+
+	out := strings.Trim(string(text), " \t\r\n")
+	switch level {
+	case "[DEBUG]":
+		logger.Debug(out)
+	case "[INFO]", "[WARN]":
+		logger.Info(out)
+	default:
+		logger.Warn(out)
+	}
+	return len(p), nil
+}
+
 // Start begins the raft server.
 func (s *Store) Start(ctx context.Context, persist bool) error {
 	notifyChan := make(chan bool, 10)
@@ -79,6 +112,10 @@ func (s *Store) Start(ctx context.Context, persist bool) error {
 	config.LocalID = raft.ServerID(s.id)
 	config.NotifyCh = notifyChan
 	address := strings.Split(s.id, ":")[0]
+
+	config.LogOutput = &logrusAdaptor{
+		logger: s.logger,
+	}
 
 	go func() {
 		var peerList string

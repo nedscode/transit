@@ -70,3 +70,20 @@ const (
 	// Assigned distribution will assign unrequested lots to processors based on load.
 	Assigned DistributionStrategy = pb.DistributionStrategy_Assigned
 )
+
+// WriteConcern is an alias to the protobuf type Concern.
+type WriteConcern = pb.Concern
+
+const (
+	// NoConcern indicates you just want to be delivered and don't care about it at all, you won't get back an ID.
+	NoConcern = pb.Concern_None
+	// ReceivedConcern waits for the message to be received by the server and gets the ID back.
+	ReceivedConcern = pb.Concern_Received
+	// DeliveredConcern waits for the message to be delivered to the server and inserted into all inboxes.
+	DeliveredConcern = pb.Concern_Delivered
+	// ConfirmedConcern means that the message has been delivered and is confirmed in the queues of existing slave servers.
+	// This is not currently implemented and is the same as Delivered currently.
+	ConfirmedConcern = pb.Concern_Confirmed
+	// ProcessedConcern requires that the server has delivered the entry to all subscribers and they in turn have ACKed it.
+	ProcessedConcern = pb.Concern_Processed
+)

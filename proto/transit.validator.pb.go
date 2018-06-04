@@ -9,6 +9,7 @@ It is generated from these files:
 
 It has these top-level messages:
 	Pong
+	Published
 	Publication
 	Entry
 	Subscription
@@ -47,9 +48,17 @@ var _ = math.Inf
 func (this *Pong) Validate() error {
 	return nil
 }
-func (this *Publication) Validate() error {
+func (this *Published) Validate() error {
 	if !(this.ID > 0) {
 		return go_proto_validators.FieldError("ID", fmt.Errorf(`ID must a positive integer`))
+	}
+	return nil
+}
+func (this *Publication) Validate() error {
+	if this.Entry != nil {
+		if err := go_proto_validators.CallValidatorIfExists(this.Entry); err != nil {
+			return go_proto_validators.FieldError("Entry", err)
+		}
 	}
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 
 const (
 	tokensGroup = iota
+	serverGroup
 	helpGroup
 	groupCount
 )
@@ -23,6 +24,7 @@ func init() {
 func (c *Config) helpCommand(_ []string) (afterFunc, error) {
 	return func() error {
 		fmt.Println("Available commands:")
+		fmt.Println("")
 		fmt.Printf("%-16s  %s\n", "Command", "Description")
 		fmt.Printf("%-16s  %s\n", "----------------", "------------------------------")
 		for _, g := range commandHelp {

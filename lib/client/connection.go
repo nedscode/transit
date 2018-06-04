@@ -13,18 +13,22 @@ type ConnectOption func(c *Client) error
 // Peers is a connection option that takes a list of peers to connect to.
 func Peers(peers ...string) ConnectOption {
 	return func(c *Client) error {
-		c.peers = peers
+		c.params.Peers = peers
 		return nil
 	}
 }
 
-// MasterToken is a connection option that takes a master token to be used for the connection.
-func MasterToken(token string) ConnectOption {
+// Token is a connection option that takes a token to be used for the connection.
+func Token(token string) ConnectOption {
 	return func(c *Client) error {
-		if len(token) != 33 || token[12] != '-' {
-			return ErrNotMasterToken
+		if len(token) == 33 && token[12] == '-' {
+			c.params.TokenType = "master"
+		} else if len(token) == 48 {
+			c.params.TokenType = "cluster"
+		} else {
+			return ErrNotToken
 		}
-		c.masterToken = token
+		c.params.Token = token
 		return nil
 	}
 }
@@ -33,8 +37,8 @@ func MasterToken(token string) ConnectOption {
 // Provide the raw PEM encoded certificate bytes (typically loaded directly from the .pem files).
 func ClientTLS(cert, key []byte) ConnectOption {
 	return func(c *Client) (err error) {
-		c.tlsMode = 2
-		c.cert, err = tls.X509KeyPair(cert, key)
+		c.params.TLSMode = 2
+		c.params.Certificate, err = tls.X509KeyPair(cert, key)
 		return
 	}
 }
@@ -42,7 +46,7 @@ func ClientTLS(cert, key []byte) ConnectOption {
 // AnonTLS is a connection option that causes anonymous client connection over TLS (the default).
 func AnonTLS() ConnectOption {
 	return func(c *Client) error {
-		c.tlsMode = 1
+		c.params.TLSMode = 1
 		return nil
 	}
 }
@@ -50,7 +54,7 @@ func AnonTLS() ConnectOption {
 // NoTLS is a connection option that causes client connection in the clear, unencrypted.
 func NoTLS() ConnectOption {
 	return func(c *Client) error {
-		c.tlsMode = 0
+		c.params.TLSMode = 0
 		return nil
 	}
 }
@@ -58,7 +62,7 @@ func NoTLS() ConnectOption {
 // ConnectTimeout is a connection option that sets the limit on the connection timeout.
 func ConnectTimeout(duration time.Duration) ConnectOption {
 	return func(c *Client) error {
-		c.connectTimeout = duration
+		c.params.ConnectTimeout = duration
 		return nil
 	}
 }
@@ -66,14 +70,41 @@ func ConnectTimeout(duration time.Duration) ConnectOption {
 // ReadTimeout is a connection option that sets the limit on the read timeout.
 func ReadTimeout(duration time.Duration) ConnectOption {
 	return func(c *Client) error {
-		c.readTimeout = duration
+		c.params.ReadTimeout = duration
 		return nil
 	}
 }
 
-func (c *Client) peerConnect(wantLeader bool, retries int) (err error) {
-	c.conn, c.client, err = connect.Establish(
-		c.ctx, c.connectTimeout, retries, c.tlsMode, c.masterToken, c.cert, wantLeader, c.peers,
-	)
+// RequireClusterToken allows the requirement for a cluster token to be provided instead of a master token.
+func RequireClusterToken() ConnectOption {
+	return func(c *Client) error {
+		c.params.RequireType = "cluster"
+		return nil
+	}
+}
+
+// URI allows the parsing of a connection URI to set options.
+func URI(uri string) ConnectOption {
+	return func(c *Client) error {
+		_, err := connect.ParseURI(uri, c.params)
+		return err
+	}
+}
+
+// PoolSize allows setting the background publisher pool size.
+// If you use lots of `Processed` write concerns, or are really cranking out those publications, you'll probably want
+// to bump this up a notch, otherwise the default value should be more than enough.
+func PoolSize(size uint) ConnectOption {
+	return func(c *Client) error {
+		if size > maxPoolSize {
+			size = maxPoolSize
+		}
+		c.params.PoolSize = int(size)
+		return nil
+	}
+}
+
+func (c *Client) peerConnect() (err error) {
+	c.conn, c.client, err = connect.EstablishGRPC(c.ctx, c.params)
 	return
 }

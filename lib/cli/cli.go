@@ -15,6 +15,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/nedscode/transit/lib/certs"
+	"github.com/nedscode/transit/lib/connect"
 	"github.com/nedscode/transit/lib/raft"
 	"github.com/nedscode/transit/proto"
 )
@@ -26,15 +27,18 @@ type afterFunc func() error
 type Config struct {
 	DataDir     string
 	Address     string
-	Cluster     string
-	ClusterKey  string
+	ClusterURI  string
+	ClusterSeed string
 	GRPCPort    int
 	GatewayPort int
 	ClusterPort int
 	TLSMode     string
 	Persist     bool
+	Debug       bool
+	Verbose     bool
 	CertNames   string
 
+	params    *connect.Parameters
 	ctx       context.Context
 	clusterID string
 	logger    logrus.FieldLogger
@@ -55,8 +59,8 @@ func New(ctx context.Context, logger logrus.FieldLogger) *Config {
 func (c *Config) AddFlags() {
 	flag.StringVar(&c.DataDir, "data-dir", "data", "Directory to store data in")
 	flag.StringVar(&c.Address, "address", "", "Our accessible IP address (first time)")
-	flag.StringVar(&c.Cluster, "cluster", "", "The cluster URI (or \"boot\" to create new cluster)")
-	flag.StringVar(&c.ClusterKey, "cluster-key", "", "If cluster doesn't have a key, will use this instead of random key")
+	flag.StringVar(&c.ClusterURI, "cluster", "", "The cluster URI (or \"boot\" to create new cluster)")
+	flag.StringVar(&c.ClusterSeed, "cluster-key", "", "If cluster doesn't have a key, will use this instead of random key")
 
 	flag.IntVar(&c.GRPCPort, "grpc-port", 9105, "The gRPC server port")
 	flag.IntVar(&c.GatewayPort, "gateway-port", 9106, "The gRPC-Gateway server port")
@@ -67,12 +71,24 @@ func (c *Config) AddFlags() {
 	flag.StringVar(&c.CertNames, "cert-names", "localhost,0.0.0.0,127.0.0.1", "The host names to use in certificate")
 
 	flag.BoolVar(&c.Persist, "raft-persist", false, "Make raft state persistent")
+	flag.BoolVar(&c.Debug, "debug", false, "Allow debugging output")
+	flag.BoolVar(&c.Verbose, "verbose", false, "Allow verbose output")
 }
 
 // Parse causes the CLI flags to be parsed and checked.
 // Add your own flags between calling `AddFlags` and `Parse` if you need.
 func (c *Config) Parse() {
 	flag.Parse()
+
+	if l, ok := c.logger.(*logrus.Logger); ok {
+		if c.Debug {
+			l.SetLevel(logrus.DebugLevel)
+		} else if c.Verbose {
+			l.SetLevel(logrus.InfoLevel)
+		} else {
+			l.SetLevel(logrus.WarnLevel)
+		}
+	}
 
 	err := os.MkdirAll(c.DataDir, 0755)
 	if err != nil {
@@ -88,17 +104,17 @@ func (c *Config) Parse() {
 		ioutil.WriteFile(path.Join(c.DataDir, "address"), []byte(c.Address), 0644)
 	}
 
-	if c.Cluster == "" {
+	if c.ClusterURI == "" {
 		data, err := ioutil.ReadFile(path.Join(c.DataDir, "cluster"))
 		if err == nil {
-			c.Cluster = string(data)
+			c.ClusterURI = string(data)
 		}
 	} else {
-		ioutil.WriteFile(path.Join(c.DataDir, "cluster"), []byte(c.Cluster), 0600)
+		ioutil.WriteFile(path.Join(c.DataDir, "cluster"), []byte(c.ClusterURI), 0600)
 	}
 
-	if c.Cluster == "boot" {
-		c.Cluster = ""
+	if c.ClusterURI == "boot" {
+		c.ClusterURI = ""
 	}
 
 	if c.Address == "" {
@@ -151,7 +167,13 @@ func (c *Config) Exec(command string, args []string) (err error) {
 }
 
 func (c *Config) timeout() (context.Context, context.CancelFunc) {
-	return context.WithTimeout(c.ctx, 1*time.Second)
+	var timeout time.Duration
+	if c != nil && c.params != nil {
+		timeout = c.params.ReadTimeout
+	} else {
+		timeout = 1 * time.Second
+	}
+	return context.WithTimeout(c.ctx, timeout)
 }
 
 func serveAdmin(mux *http.ServeMux) error {

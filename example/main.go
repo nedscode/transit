@@ -2,26 +2,44 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
+	"io/ioutil"
+	"os"
 	"time"
 
-	// The following file is contained in the example/bar folder and contains the Bar struct used below.
-	"github.com/nedscode/transit/example/bar"
-
-	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
 
 	"github.com/nedscode/transit/lib/client"
+	"github.com/nedscode/transit/lib/connect"
+
+	// This contains the Bar proto message which is used as in the example below.
+	"github.com/nedscode/transit/example/bar"
 )
 
 func main() {
+	var uri string
+	if data, err := ioutil.ReadFile("data/cluster"); err == nil {
+		uri = string(data)
+	}
+	flag.StringVar(&uri, "cluster", uri, "The cluster URI (defaults to contents of data/cluster)")
+	flag.Parse()
+
+	if uri == "" {
+		fmt.Println("Supply a connection uri with `-cluster`.")
+		os.Exit(1)
+	}
+
 	tc, err := transit.Connect(
 		context.Background(),
-		transit.Peers("192.168.1.1:9105", "192.168.1.2:9105"),
-		transit.MasterToken("kkRGaorSQWD3-2K3aicKpHXobkksLxmBD"),
-		transit.AnonTLS(),
+		transit.URI(uri),
 	)
 	if err != nil {
+		if err == connect.ErrIncorrectTokenType {
+			fmt.Println("You have provided a cluster token to connect as a client, please use a master token.")
+			os.Exit(1)
+		}
+
 		panic(err)
 	}
 
@@ -75,8 +93,12 @@ func main() {
 	// It may seem unreasonable to both have an entry validity time and a queue availability time,
 	// however an entry may have multiple queues it needs to be delivered to, each with different
 	// requirements.
-	id := tc.Publish(e)
-	fmt.Printf("Published my entry, got ID %d\n", id)
+	p := tc.Publish(e, transit.DeliveredConcern, 100)
+	p.Done(true)
+	if err = p.Err(); err != nil {
+		panic(err)
+	}
+	fmt.Printf("Published my entry, got ID %d, concern %d, err %#v\n", p.ID(), p.Concern(), p.Err())
 
 	// The handler will take a single message from the queue, acking it when the handler finishes.
 	// If the handler returns an error, the process stops and the error is returned to the main
@@ -85,19 +107,19 @@ func main() {
 	// message will be returned back to the queue on the Transit server for another process
 	// to handle.
 	err = sub.Handle(func(e *transit.Entry) (err error) {
-		var message proto.Message
-		err = ptypes.UnmarshalAny(e.Message, message)
-		if err != nil {
+		dyn := &ptypes.DynamicAny{}
+		err = ptypes.UnmarshalAny(e.Message, dyn)
+		if err == nil {
 			// Process message
-			fmt.Printf("Hey! I just got a %s #%d: %#v\n", e.Topic, e.ID, message)
+			fmt.Printf("Hey! I just got a %s #%d\n", e.Topic, e.ID)
 
-			if v, ok := message.(*bar.Bar); ok && e.Topic == "foo.bar" {
-				fmt.Printf("My foo bar arrived with a %s", v.Baz)
+			if v, ok := dyn.Message.(*bar.Bar); ok {
+				fmt.Printf("My %s arrived with a baz of %s\n", e.Topic, v.Baz)
 			}
 		}
-		return
+		return transit.ErrShuttingDown
 	})
-	if err != nil {
+	if err != nil && err != transit.ErrShuttingDown {
 		panic(err)
 	}
 }

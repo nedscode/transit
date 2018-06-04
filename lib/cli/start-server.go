@@ -14,10 +14,16 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"google.golang.org/grpc"
 
+	"github.com/nedscode/transit/lib/connect"
+	"github.com/nedscode/transit/lib/inboxes"
 	"github.com/nedscode/transit/lib/raft"
 	"github.com/nedscode/transit/lib/server"
 	"github.com/nedscode/transit/proto"
 )
+
+func init() {
+	addHelp(serverGroup, "start-server", "Start up a server (default command)")
+}
 
 func (c *Config) startServerCommand([]string) (cb afterFunc, err error) {
 	cb = c.startServer
@@ -31,9 +37,9 @@ func (c *Config) startServer() error {
 
 	// Our clusterID will be our "peer accessible" IP and gRPC (not raft) port.
 	c.clusterID = fmt.Sprintf("%s:%d", c.Address, c.GRPCPort)
-	bootstrap := c.Cluster == ""
+	bootstrap := c.ClusterURI == ""
 	c.raft = raft.New(c.clusterID, fmt.Sprintf(":%d", c.ClusterPort), c.DataDir, bootstrap, c.logger)
-	c.raft.SeedKey = c.ClusterKey
+	c.raft.SeedKey = c.ClusterSeed
 	c.logger.Info("Serving raft protocol on ", c.ClusterPort)
 	c.raft.Start(c.ctx, c.Persist)
 
@@ -56,8 +62,18 @@ func (c *Config) startServer() error {
 				c.logger.Fatal("Cluster URI is malformed")
 			}
 
-			//TODO implement new connect.Establish() call instead
-			_, client, cErr := c.connectNode(peers, key, true)
+			c.params, err = connect.ParseURI(c.ClusterURI, nil)
+			if err != nil {
+				c.logger.WithError(err).WithField("uri", c.ClusterURI).Fatal("Failed to parse connection URI")
+			}
+
+			if c.params.TokenType != "cluster" {
+				c.logger.Fatalf("Cannot connect to cluster with a %s token (needs cluster token)", c.params.TokenType)
+			}
+
+			c.params.RequireType = "cluster"
+
+			_, client, cErr := connect.EstablishGRPC(c.ctx, c.params)
 			if cErr != nil {
 				c.logger.WithError(cErr).Fatal("Cannot connect to leader node")
 			}
@@ -103,7 +119,7 @@ func (c *Config) startServer() error {
 	rpcServer := grpc.NewServer(opts...)
 
 	// Register a new server as the gRPC handler.
-	transit.RegisterTransitServer(rpcServer, server.New(c.logger, c.raft))
+	transit.RegisterTransitServer(rpcServer, server.New(c.ctx, c.logger, c.raft, inboxes.SyncNone))
 
 	// Serve gRPC Server
 	c.logger.Infof("Serving gRPC on %s://%s:%d", proto, c.Address, c.GRPCPort)
@@ -135,9 +151,9 @@ func (c *Config) startServer() error {
 	}
 
 	// Save the current cluster connection string
-	c.Cluster = fmt.Sprintf("transit://%s/%s", strings.Join(c.raft.PeerAddresses(), ","), key)
-	c.logger.Infof("Boot additional servers with `-cluster %s`", c.Cluster)
-	ioutil.WriteFile(path.Join(c.DataDir, "cluster"), []byte(c.Cluster), 0600)
+	c.ClusterURI = fmt.Sprintf("transit://%s/%s", strings.Join(c.raft.PeerAddresses(), ","), key)
+	c.logger.Infof("Boot additional servers with `-cluster %s`", c.ClusterURI)
+	ioutil.WriteFile(path.Join(c.DataDir, "cluster"), []byte(c.ClusterURI), 0600)
 
 	gatewayAddr := fmt.Sprintf("%s:%d", c.Address, c.GatewayPort)
 	c.logger.Infof("Serving gRPC gateway on %s://%s", proto, gatewayAddr)
@@ -158,6 +174,7 @@ func (c *Config) startServer() error {
 	certFile := path.Join(c.DataDir, "cert.pem")
 	keyFile := path.Join(c.DataDir, "key.pem")
 
+	fmt.Println("Server is running")
 	c.logger.WithError(gwServer.ListenAndServeTLS(certFile, keyFile)).Fatal("Gateway server failed")
 
 	return nil

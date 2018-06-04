@@ -55,6 +55,14 @@
             "format": "uint64"
           },
           {
+            "name": "ack",
+            "description": "Ack indicates whether this message should be acked or not.",
+            "in": "query",
+            "required": false,
+            "type": "boolean",
+            "format": "boolean"
+          },
+          {
             "name": "close",
             "description": "Close causes the subscription to be terminated without receiving a new message.",
             "in": "query",
@@ -120,7 +128,7 @@
           "200": {
             "description": "",
             "schema": {
-              "$ref": "#/definitions/Publication"
+              "$ref": "#/definitions/Published"
             }
           }
         },
@@ -130,7 +138,7 @@
             "in": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/Entry"
+              "$ref": "#/definitions/Publication"
             }
           }
         ],
@@ -271,6 +279,18 @@
         }
       }
     },
+    "Concern": {
+      "type": "string",
+      "enum": [
+        "None",
+        "Received",
+        "Delivered",
+        "Confirmed",
+        "Processed"
+      ],
+      "default": "None",
+      "description": "Concern is the level of write concern you wish to achieve when publishing.\n\n - None: None indicates you just want to be delivered and don't care about it at all, you won't get back an ID.\n - Received: Received waits for the message to be received by the server and gets the ID back.\n - Delivered: Delivered waits for the message to be delivered to the server and inserted into all inboxes.\n - Confirmed: Confirmed means that the message has been delivered and is confirmed in the queues of existing slave servers.\nThis is not currently implmented and is the same as Delivered currently.\n - Processed: Processed requires that the server has delivered the entry to all subscribers and they in turn have ACKed it."
+    },
     "DeliveryStrategy": {
       "type": "string",
       "enum": [
@@ -374,10 +394,33 @@
     "Publication": {
       "type": "object",
       "properties": {
+        "entry": {
+          "$ref": "#/definitions/Entry",
+          "description": "Entry is the entry that is being added to the queue."
+        },
+        "concern": {
+          "$ref": "#/definitions/Concern",
+          "description": "Concern is the write concern of the publisher."
+        },
+        "timeout": {
+          "type": "string",
+          "format": "uint64",
+          "description": "Timeout is how many milliseconds the publisher is willing to wait for it's write concern.\nIf the timeout expires, the publisher will get back a Published with the reached write concern.\nIf timeout is zero, the thread will wait forever until the desired state is reached, the client disconnects\nor the server shuts down."
+        }
+      },
+      "description": "Publication is sent to a call to Publish."
+    },
+    "Published": {
+      "type": "object",
+      "properties": {
         "id": {
           "type": "integer",
           "format": "uint64",
           "description": "ID is the internally assigned ID for your submitted Entry."
+        },
+        "concern": {
+          "$ref": "#/definitions/Concern",
+          "description": "Concern is the reached write concern level at the time of the published message being created.\nNote: The returned write concern may not be the same as your requested concern."
         }
       },
       "description": "Publication is returned from a call to Publish."

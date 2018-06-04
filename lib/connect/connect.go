@@ -22,26 +22,51 @@ var (
 
 	// ErrNoLeader is an error returned when there is no leader found.
 	ErrNoLeader = errors.New("no leader available")
+
+	// ErrIncorrectTokenType is an error returned when a cluster URI is provided for a gRPC connection or vice-versa.
+	ErrIncorrectTokenType = errors.New("token type is incorrect for this kind of connection")
+
+	// ErrInvalidURI is an error returned when a URI is provided that is not parseable.
+	ErrInvalidURI = errors.New("invalid connection uri provided")
+
+	// ErrInvalidToken is an error returned when a URI is provided that doesn't have a valid token.
+	ErrInvalidToken = errors.New("invalid token in connection uri")
+
+	// ErrInvalidTLSMode is an error returned when an unknown TLS mode parameter is provided in the uri.
+	ErrInvalidTLSMode = errors.New("invalid TLS Mode specified")
+
+	// ErrInvalidKeyFile is an error returned when a key file is not readable.
+	ErrInvalidKeyFile = errors.New("error reading provided key file")
+
+	// ErrInvalidCertFile is an error returned when a cert file is not readable.
+	ErrInvalidCertFile = errors.New("error reading provided certificate file")
+
+	// ErrInvalidCert is an error returned when a key+cert pair is not able to be processed into a connection cert.
+	ErrInvalidCert = errors.New("unable to parse key and certificate into credentials")
+
+	// ErrInvalidDuration is an error returned when a timeout value is not parseable.
+	ErrInvalidDuration = errors.New("unable to parse duration value")
+
+	// ErrInvalidRetries is an error returned when a retry count is not parseable.
+	ErrInvalidRetries = errors.New("unable to parse retries value")
 )
 
-// Establish connects to the given peers and optionally connects to the leader of the cluster.
-func Establish(
-	ctx context.Context,
-	timeout time.Duration,
-	retries int,
-	tlsMode int,
-	masterToken string,
-	cert tls.Certificate,
-	wantLeader bool,
-	peers []string,
-) (
-	conn *grpc.ClientConn,
-	client transit.TransitClient,
-	err error,
-) {
+const (
+	defaultConnectTimeout = 500 * time.Millisecond
+	defaultReadTimeout    = 1000 * time.Millisecond
+	defaultRetries        = 3
+)
+
+// EstablishGRPC connects to the given GRPC peers and optionally connects to the leader of the cluster.
+func EstablishGRPC(ctx context.Context, p *Parameters) (conn *grpc.ClientConn, client transit.TransitClient, err error) {
+	if p.RequireType != "" && p.TokenType != p.RequireType {
+		err = ErrIncorrectTokenType
+		return
+	}
+
 	var opts []grpc.DialOption
 
-	switch tlsMode {
+	switch p.TLSMode {
 	case 0:
 		opts = append(opts, grpc.WithInsecure())
 	case 1:
@@ -50,13 +75,13 @@ func Establish(
 		})))
 	case 2:
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
-			Certificates: []tls.Certificate{cert},
+			Certificates: []tls.Certificate{p.Certificate},
 		})))
 	}
 
-	if masterToken != "" {
+	if p.Token != "" {
 		opts = append(opts, grpc.WithPerRPCCredentials(&transit.TokenCredentials{
-			Token: masterToken,
+			Token: p.Token,
 		}))
 	}
 
@@ -69,7 +94,7 @@ func Establish(
 			return false
 		}
 
-		cCtx, cancel := context.WithTimeout(ctx, timeout)
+		cCtx, cancel := context.WithTimeout(ctx, p.ConnectTimeout)
 		defer cancel()
 
 		conn, err = grpc.DialContext(
@@ -83,7 +108,7 @@ func Establish(
 
 		client = transit.NewTransitClient(conn)
 
-		rCtx, cancel := context.WithTimeout(ctx, timeout)
+		rCtx, cancel := context.WithTimeout(ctx, p.ReadTimeout)
 		defer cancel()
 
 		var pong *transit.Pong
@@ -94,7 +119,7 @@ func Establish(
 
 		peerFound = true
 
-		if !wantLeader || pong.Leading {
+		if !p.LeaderOnly || pong.Leading {
 			return true
 		}
 
@@ -106,9 +131,8 @@ func Establish(
 	}
 
 	// Create a copy of peers
-	x := make([]string, len(peers))
-	copy(x, peers)
-	peers = x
+	peers := make([]string, len(p.Peers))
+	copy(peers, p.Peers)
 
 	// Shuffle peers copy, so we get a random connect order
 	n := len(peers)
@@ -117,8 +141,8 @@ func Establish(
 		peers[i], peers[j] = peers[j], peers[i]
 	}
 
-	// Repeat up to retries times
-	for retry := 0; retry < retries; retry++ {
+	// Repeat up to RetryCount times
+	for retry := 0; retry < p.RetryCount; retry++ {
 		// Try all our peers and their suggested leader once per retry
 		tried = map[string]bool{}
 

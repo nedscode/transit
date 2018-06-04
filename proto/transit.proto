@@ -25,14 +25,14 @@ option (gogoproto.goproto_registration) = true;
 
 service Transit {
     // Ping tests server is alive.
-    rpc Ping(Pong) returns (Pong) {
+    rpc Ping (Pong) returns (Pong) {
         option (google.api.http) = {
             get: "/api/v1/ping/{id}"
         };
     }
 
     // Publish takes a message entry and returns the published message id.
-    rpc Publish (Entry) returns (Publication) {
+    rpc Publish (Publication) returns (Published) {
         option (google.api.http) = {
             post: "/api/v1/publish"
             body: "*"
@@ -104,8 +104,27 @@ message Pong {
     bool leading = 3;
 }
 
+// Concern is the level of write concern you wish to achieve when publishing.
+enum Concern {
+    // None indicates you just want to be delivered and don't care about it at all, you won't get back an ID.
+    None = 0;
+
+    // Received waits for the message to be received by the server and gets the ID back.
+    Received = 1;
+
+    // Delivered waits for the message to be delivered to the server and inserted into all inboxes.
+    Delivered = 2;
+
+    // Confirmed means that the message has been delivered and is confirmed in the queues of existing slave servers.
+    // This is not currently implemented and is the same as Delivered currently.
+    Confirmed = 3;
+
+    // Processed requires that the server has delivered the entry to all subscribers and they in turn have ACKed it.
+    Processed = 4;
+}
+
 // Publication is returned from a call to Publish.
-message Publication {
+message Published {
     // ID is the internally assigned ID for your submitted Entry.
     uint64 id = 1 [
         (gogoproto.customname) = "ID",
@@ -113,6 +132,25 @@ message Publication {
             int_gt: 0
             human_error: "ID must a positive integer"
     }];
+
+    // Concern is the reached write concern level at the time of the published message being created.
+    // Note: The returned write concern may not be the same as your requested concern.
+    Concern concern = 10;
+}
+
+// Publication is sent to a call to Publish.
+message Publication {
+    // Entry is the entry that is being added to the queue.
+    Entry entry = 1;
+
+    // Concern is the write concern of the publisher.
+    Concern concern = 10;
+
+    // Timeout is how many milliseconds the publisher is willing to wait for it's write concern.
+    // If the timeout expires, the publisher will get back a Published with the reached write concern.
+    // If timeout is zero, the thread will wait forever until the desired state is reached, the client disconnects
+    // or the server shuts down.
+    uint64 timeout = 11;
 }
 
 // Entry represents a published entry in the message bus.
@@ -193,8 +231,10 @@ message Notification {
 message Acknowledgement {
     // Sub is the subscription you are acknowedging, you get this from the Notification.
     Sub sub = 1;
+    // Ack indicates whether this message should be acked or not.
+    bool ack = 2;
     // Close causes the subscription to be terminated without receiving a new message.
-    bool close = 2;
+    bool close = 3;
 }
 
 // Sub is provided to a subscriber in the notification and defines which entry in which inbox should be marked as

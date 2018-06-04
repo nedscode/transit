@@ -24,18 +24,20 @@ func NewToken() string {
 	return string(b)
 }
 
-// GetAuthTokenFor returns a request token for the given token and timestamp string.
-// If timestamp is not provided, one will be generated.
-// If timestamp is provided but is invalid, or more than 5 minutes different from current time, an empty string will
+// GetAuthTokenFor returns a request token for the given token and nonce string.
+// If entropy string is not provided (""), one will be generated, based off current time and the given instance id.
+// If entropy is provided but is invalid, or more than 5 minutes different from current time, an empty string will
 // be returned.
-func GetAuthTokenFor(token string, entropy string) (auth string, ts, nonce int64) {
+// The instance id is used when generating a nonce to allow multiple processes without risking conflict. In such a case
+// each process would provide a unique instance ID when getting a token.
+func GetAuthTokenFor(token string, entropy string, instance int32) (auth string, ts, nonce int64) {
 	if len(token) == 48 {
 		// This is a cluster token
 		auth = token
 		return
 	}
 
-	if len(token) < 14 || token[12] != '-' {
+	if len(token) < 14 || token[12] != '-' || instance < 0 {
 		// This is not a valid token
 		// This is not a valid token
 		return
@@ -50,6 +52,10 @@ func GetAuthTokenFor(token string, entropy string) (auth string, ts, nonce int64
 	if entropy == "" {
 		ts = now
 		nonce = time.Now().UnixNano() % 1000000000
+		if instance > 0 {
+			v := int64(instance) << 32
+			nonce += v
+		}
 
 		hexTime = strconv.FormatInt(ts, 16)
 		hexNonce = strconv.FormatInt(nonce, 16)
@@ -92,7 +98,7 @@ func GetAuthTokenFor(token string, entropy string) (auth string, ts, nonce int64
 func (t *TokenCredentials) GetRequestMetadata(ctx context.Context, uri ...string) (map[string]string, error) {
 	md := map[string]string{}
 	if t.Token != "" {
-		md["token"], _, _ = GetAuthTokenFor(t.Token, "")
+		md["token"], _, _ = GetAuthTokenFor(t.Token, "", 0)
 	}
 
 	return md, nil

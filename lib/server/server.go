@@ -5,14 +5,15 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/nedscode/transit/lib/inboxes"
 	"github.com/nedscode/transit/lib/raft"
 	"github.com/nedscode/transit/proto"
-	"github.com/nedscode/transit/lib/inboxes"
 )
 
 // Backend is a TransitServer handler
@@ -22,6 +23,7 @@ type Backend struct {
 	store  *raft.Store
 	inbox  *inboxes.Inboxes
 	otp    *otpStore
+	ctx    context.Context
 }
 
 var _ transit.TransitServer = (*Backend)(nil)
@@ -34,13 +36,14 @@ var (
 )
 
 // New creates a new Backend for use as a transit handler
-func New(logger logrus.FieldLogger, store *raft.Store) *Backend {
+func New(ctx context.Context, logger logrus.FieldLogger, store *raft.Store, mode inboxes.SyncMode) *Backend {
 	return &Backend{
 		mu:     &sync.RWMutex{},
 		logger: logger,
 		store:  store,
-		inbox:  inboxes.New(nil),
+		inbox:  inboxes.New(ctx, nil, mode),
 		otp:    &otpStore{times: map[string]*otp{}},
+		ctx:    ctx,
 	}
 }
 
@@ -67,10 +70,11 @@ func (b *Backend) Ping(ctx context.Context, ping *transit.Pong) (*transit.Pong, 
 }
 
 // Publish takes a message entry and returns the published message id.
-func (b *Backend) Publish(ctx context.Context, e *transit.Entry) (*transit.Publication, error) {
+func (b *Backend) Publish(ctx context.Context, p *transit.Publication) (*transit.Published, error) {
 	if !b.store.Leading() {
 		return nil, notLeaderError
 	}
+	wrap := inboxes.Wrap(p.Entry)
 
 	logger := b.logger.WithField("rpc", "publish")
 
@@ -79,21 +83,58 @@ func (b *Backend) Publish(ctx context.Context, e *transit.Entry) (*transit.Publi
 		return nil, err
 	}
 	logger = logger.WithField("tokenName", tokenName)
-	logger = logger.WithField("entry", e)
+	logger = logger.WithField("entry", wrap)
 
-	b.inbox.Add(e)
-	ret := &transit.Publication{
-		ID: e.ID,
+	var done chan *struct{}
+
+	if p.Concern > transit.Concern_None {
+		done = make(chan *struct{})
+		monitor := make(chan transit.Concern, 10)
+		wrap.Updated = monitor
+
+		go func() {
+			var waitCtx context.Context
+			var cancel context.CancelFunc
+
+			if p.Timeout > 0 {
+				waitCtx, cancel = context.WithTimeout(ctx, time.Duration(p.Timeout)*time.Millisecond)
+			} else {
+				waitCtx, cancel = context.WithCancel(ctx)
+			}
+			defer cancel()
+
+		loop:
+			for {
+				select {
+				case concern := <-monitor:
+					if concern >= p.Concern {
+						break loop
+					}
+				case <-waitCtx.Done():
+					break loop
+				}
+			}
+			done <- nil
+		}()
 	}
-	logger.WithField("ret", ret).Info("Publishing entry")
+	b.inbox.Add(wrap)
+
+	if done != nil {
+		<-done
+	}
+
+	ret := &transit.Published{
+		ID:      wrap.ID,
+		Concern: wrap.Concern,
+	}
+	logger.WithField("ret", ret).Info("Published entry")
 	return ret, nil
 }
 
 type subscriber struct {
-
 }
 
-func (s *subscriber) CanAccept(e *transit.Entry) bool {
+func (s *subscriber) CanAccept(e *inboxes.EntryWrap) bool {
 	return true
 }
 
@@ -112,6 +153,25 @@ func (b *Backend) Subscribe(d *transit.Subscription, s transit.Transit_Subscribe
 	logger = logger.WithField("tokenName", tokenName)
 
 	logger.Info("New subscriber")
+
+	subscriber := &subscriber{}
+
+	box := b.inbox.Inbox(d.Prefix, d.Group, nil)
+	running := true
+	for running {
+		wrap, changed := box.Next(subscriber)
+		s.Send(&transit.Notification{
+			Sub: &transit.Sub{
+				Prefix: d.Prefix,
+				Group:  d.Group,
+				ID:     wrap.ID,
+			},
+			Entry: wrap.Entry,
+		})
+
+		// Wait for change notification before sending a new entry
+		running = <-changed
+	}
 
 	return nil
 }
