@@ -184,7 +184,7 @@ func (c *Config) joinCluster(client transit.TransitClient, key string) error {
 	ctx, cancel := c.timeout()
 	defer cancel()
 
-	c.logger.WithField("key", key).Info("joining raft")
+	c.logger.WithField("key", key).Info("Joining raft")
 	join, err := client.ClusterJoin(
 		ctx,
 		&transit.Server{

@@ -89,7 +89,7 @@ func (l *logrusAdaptor) Write(p []byte) (n int, err error) {
 
 	logger := l.logger
 	if len(prefix) > 0 {
-		logger = logger.WithField("system", string(prefix))
+		logger = logger.WithField("prefix", string(prefix))
 	}
 
 	out := strings.Trim(string(text), " \t\r\n")
@@ -185,7 +185,7 @@ func (s *Store) Start(ctx context.Context, persist bool) error {
 			return fmt.Errorf("cannot boot, cluster already has key")
 		}
 
-		s.logger.WithField("id", config.LocalID).WithField("addr", s.bind).Info("booting")
+		s.logger.WithField("id", config.LocalID).WithField("addr", s.bind).Info("Booting")
 		// This cluster has not been initialised yet.
 		s.raft.BootstrapCluster(raft.Configuration{
 			Servers: []raft.Server{

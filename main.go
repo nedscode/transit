@@ -6,6 +6,7 @@ import (
 	"flag"
 	"net/http"
 
+	"github.com/norganna/formatrus"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 
@@ -18,6 +19,7 @@ func main() {
 	defer cancel()
 
 	logger := logrus.New()
+	logger.Formatter = formatrus.DefaultFormatter
 
 	c := cli.New(ctx, logger)
 	c.AddFlags()

@@ -154,7 +154,7 @@ func TestMemoryInbox(t *testing.T) {
 	entry, _ := in.Next(&wildSubscriber{})
 
 	if entry == nil {
-		t.Fatal("expected to have a next item")
+		t.Fatal("Expected to have a next item")
 	}
 
 	if entry.Topic != topic {

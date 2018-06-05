@@ -191,7 +191,7 @@ func tokensFromContext(ctx context.Context) (t []string) {
 
 func (b *Backend) requireCluster(ctx context.Context) error {
 	md, _ := metadata.FromIncomingContext(ctx)
-	b.logger.WithField("md", md).Info("metadata")
+	b.logger.WithField("md", md).Info("Metadata")
 
 	tokens := tokensFromContext(ctx)
 	if len(tokens) == 0 {

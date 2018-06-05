@@ -83,30 +83,30 @@ func (c *Config) connectNode(peers []string, key string, wantLeader bool) (conn 
 			if err == nil {
 				if !wantLeader {
 					// Request indicated that leadership was not necessary
-					c.logger.Info("found a live node")
+					c.logger.Info("Found a live node")
 					return
 				}
 				if leading {
 					// If this node thinks it's the leader, then we've arrived
 					if err == nil {
-						c.logger.Info("found a leader node")
+						c.logger.Info("Found a leader node")
 						return
 					}
-					c.logger.WithError(err).Info("error joining cluster")
+					c.logger.WithError(err).Info("Error joining cluster")
 				} else if leader != "" {
 					if !tried[peer] {
 						// Try this peer next
-						c.logger.Info("trying leader node next")
+						c.logger.Info("Trying leader node next")
 						continue
 					} else {
-						c.logger.Info("supposed leader already tried", peer)
+						c.logger.Info("Supposed leader already tried", peer)
 					}
 				}
 			} else {
-				c.logger.WithError(err).Info("error with node")
+				c.logger.WithError(err).Info("Error with node")
 			}
 		} else {
-			c.logger.Info("already tried this node")
+			c.logger.Info("Already tried this node")
 		}
 
 		// Mark the peer as tried
@@ -115,7 +115,7 @@ func (c *Config) connectNode(peers []string, key string, wantLeader bool) (conn 
 		// Get the next peer
 		i++
 		if i < n {
-			c.logger.Info("proceeding to next node")
+			c.logger.Info("Proceeding to next node")
 			peer = peers[i]
 		}
 	}
@@ -150,7 +150,7 @@ func (c *Config) dialNode(host, key string) (conn *grpc.ClientConn, client trans
 		host = "127.0.0.1" + host[len(c.Address):]
 	}
 
-	c.logger.WithField("host", host).WithField("key", key).Info("dialling node")
+	c.logger.WithField("host", host).WithField("key", key).Info("Dialling node")
 	// We always dial our local context
 
 	opts := []grpc.DialOption{
@@ -173,7 +173,7 @@ func (c *Config) dialNode(host, key string) (conn *grpc.ClientConn, client trans
 		return
 	}
 
-	c.logger.Info("pinging node")
+	c.logger.Info("Pinging node")
 	pingCtx, pingCancel := c.timeout()
 	defer pingCancel()
 

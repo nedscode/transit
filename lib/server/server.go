@@ -62,7 +62,7 @@ func (b *Backend) Ping(ctx context.Context, ping *transit.Pong) (*transit.Pong, 
 		Leading: b.store.Leading(),
 	}
 
-	logger = logger.WithField("tokenName", tokenName)
+	logger = logger.WithField("user", tokenName)
 	logger = logger.WithField("ping", ping)
 
 	logger.WithField("ret", ret).Info("Sending pong")
@@ -82,8 +82,8 @@ func (b *Backend) Publish(ctx context.Context, p *transit.Publication) (*transit
 	if err != nil {
 		return nil, err
 	}
-	logger = logger.WithField("tokenName", tokenName)
-	logger = logger.WithField("entry", wrap)
+	logger = logger.WithField("user", tokenName)
+	logger = logger.WithField("entry", p.Entry)
 
 	var done chan *struct{}
 
@@ -150,7 +150,7 @@ func (b *Backend) Subscribe(d *transit.Subscription, s transit.Transit_Subscribe
 	if err != nil {
 		return err
 	}
-	logger = logger.WithField("tokenName", tokenName)
+	logger = logger.WithField("user", tokenName)
 
 	logger.Info("New subscriber")
 
@@ -189,7 +189,7 @@ func (b *Backend) Ack(ctx context.Context, p *transit.Acknowledgement) (*transit
 	if err != nil {
 		return nil, err
 	}
-	logger = logger.WithField("tokenName", tokenName)
+	logger = logger.WithField("user", tokenName)
 
 	logger = logger.WithField("sub", p)
 
