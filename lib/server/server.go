@@ -37,11 +37,13 @@ var (
 
 // New creates a new Backend for use as a transit handler
 func New(ctx context.Context, logger logrus.FieldLogger, store *raft.Store, mode inboxes.SyncMode) *Backend {
+	logger = logger.WithField("prefix", "handler")
+
 	return &Backend{
 		mu:     &sync.RWMutex{},
 		logger: logger,
 		store:  store,
-		inbox:  inboxes.New(ctx, nil, mode),
+		inbox:  inboxes.New(ctx, logger, nil, mode),
 		otp:    &otpStore{times: map[string]*otp{}},
 		ctx:    ctx,
 	}
@@ -65,7 +67,7 @@ func (b *Backend) Ping(ctx context.Context, ping *transit.Pong) (*transit.Pong, 
 	logger = logger.WithField("user", tokenName)
 	logger = logger.WithField("ping", ping)
 
-	logger.WithField("ret", ret).Info("Sending pong")
+	logger.WithField("ret", ret).Debug("Sending pong")
 	return ret, nil
 }
 
@@ -127,7 +129,7 @@ func (b *Backend) Publish(ctx context.Context, p *transit.Publication) (*transit
 		ID:      wrap.ID,
 		Concern: wrap.Concern,
 	}
-	logger.WithField("ret", ret).Info("Published entry")
+	logger.WithField("ret", ret).Debug("Published entry")
 	return ret, nil
 }
 
@@ -152,7 +154,7 @@ func (b *Backend) Subscribe(d *transit.Subscription, s transit.Transit_Subscribe
 	}
 	logger = logger.WithField("user", tokenName)
 
-	logger.Info("New subscriber")
+	logger.Debug("New subscriber")
 
 	subscriber := &subscriber{}
 
@@ -197,7 +199,7 @@ func (b *Backend) Ack(ctx context.Context, p *transit.Acknowledgement) (*transit
 		Success: true,
 	}
 
-	logger.WithField("ret", ret).Info("Acking entry")
+	logger.WithField("ret", ret).Debug("Acking entry")
 	return ret, nil
 }
 
@@ -237,7 +239,7 @@ func (b *Backend) ClusterApply(ctx context.Context, a *transit.ApplyCommands) (*
 		ret.Succeed = true
 	}
 
-	logger.WithField("ret", ret).Info("Applying commands")
+	logger.WithField("ret", ret).Debug("Applying commands")
 	return ret, nil
 }
 
@@ -260,7 +262,7 @@ func (b *Backend) ClusterGetKeys(ctx context.Context, s *transit.Strings) (*tran
 		Values: m,
 	}
 
-	logger.WithField("ret", ret).Info("Getting keys")
+	logger.WithField("ret", ret).Debug("Getting keys")
 	return ret, nil
 }
 
@@ -279,7 +281,7 @@ func (b *Backend) ClusterList(ctx context.Context, s *transit.String) (*transit.
 		Values: list,
 	}
 
-	logger.WithField("ret", ret).Info("Listing keys")
+	logger.WithField("ret", ret).Debug("Listing keys")
 	return ret, nil
 }
 
@@ -306,7 +308,7 @@ func (b *Backend) ClusterJoin(ctx context.Context, s *transit.Server) (*transit.
 		ret.Succeed = true
 	}
 
-	logger.WithField("ret", ret).Info("Joining to cluster")
+	logger.WithField("ret", ret).Debug("Joining to cluster")
 	return ret, nil
 }
 
@@ -324,6 +326,6 @@ func (b *Backend) ClusterLeader(ctx context.Context, v *transit.Void) (*transit.
 		Value: b.store.Leader(),
 	}
 
-	logger.WithField("ret", ret).Info("Returning leader")
+	logger.WithField("ret", ret).Debug("Returning leader")
 	return ret, nil
 }

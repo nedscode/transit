@@ -42,6 +42,8 @@ type Command struct {
 
 // New returns a new Store.
 func New(id, bind, dataDir string, bootstrap bool, logger logrus.FieldLogger) *Store {
+	logger = logger.WithField("prefix", "raft-store")
+
 	return &Store{
 		id:      id,
 		bind:    bind,

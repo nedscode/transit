@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/nedscode/transit/proto"
+	"github.com/sirupsen/logrus/hooks/test"
 )
 
 func findIn(in []*EntryWrap, x *EntryWrap) int {
@@ -138,8 +139,10 @@ func TestMemoryInbox(t *testing.T) {
 	topic := "foo.bar.baz"
 	identity := "123"
 
+	logger, _ := test.NewNullLogger()
+
 	in := NewMemoryInbox(context.Background(), 100, 1000)
-	ib := New(context.Background(), nil, SyncNone)
+	ib := New(context.Background(), logger, nil, SyncNone)
 	ib.boxes[topic] = &inboxDetail{
 		Inbox: in,
 		topic: topic,

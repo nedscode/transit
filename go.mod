@@ -13,6 +13,7 @@ require (
 	github.com/hashicorp/golang-lru v0.0.0-20180201235237-0fb14efe8c47
 	github.com/hashicorp/raft v1.0.0
 	github.com/hashicorp/raft-boltdb v0.0.0-20171010151810-6e5ba93211ea
+	github.com/hokaccha/go-prettyjson v0.0.0-20180528130907-d229c224a219
 	github.com/minio/minio v0.0.0-20180521181157-71c4ff9d10cc
 	github.com/mwitkow/go-proto-validators v0.0.0-20180403085117-0950a7990007
 	github.com/norganna/formatrus v1.0.0

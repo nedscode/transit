@@ -41,6 +41,7 @@ type Config struct {
 	params    *connect.Parameters
 	ctx       context.Context
 	clusterID string
+	log       *logrus.Logger
 	logger    logrus.FieldLogger
 	raft      *raft.Store
 	certs     *certs.Store
@@ -48,9 +49,12 @@ type Config struct {
 }
 
 // New will create a new CLI configuration.
-func New(ctx context.Context, logger logrus.FieldLogger) *Config {
+func New(ctx context.Context, log *logrus.Logger) *Config {
+	logger := log.WithField("prefix", "cli")
+
 	return &Config{
 		ctx:    ctx,
+		log:    log,
 		logger: logger,
 	}
 }
@@ -80,14 +84,15 @@ func (c *Config) AddFlags() {
 func (c *Config) Parse() {
 	flag.Parse()
 
-	if l, ok := c.logger.(*logrus.Logger); ok {
-		if c.Debug {
-			l.SetLevel(logrus.DebugLevel)
-		} else if c.Verbose {
-			l.SetLevel(logrus.InfoLevel)
-		} else {
-			l.SetLevel(logrus.WarnLevel)
-		}
+	if c.Debug {
+		c.log.SetLevel(logrus.DebugLevel)
+		c.logger.Info("Setting logging level to DEBUG")
+	} else if c.Verbose {
+		c.log.SetLevel(logrus.InfoLevel)
+		c.logger.Info("Setting logging level to INFO")
+	} else {
+		c.log.SetLevel(logrus.WarnLevel)
+		c.logger.Info("Setting logging level to WARN")
 	}
 
 	err := os.MkdirAll(c.DataDir, 0755)

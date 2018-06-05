@@ -29,6 +29,8 @@ type Store struct {
 
 // New returns a new certificate store.
 func New(logger logrus.FieldLogger) *Store {
+	logger = logger.WithField("prefix", "certs")
+
 	return &Store{
 		logger: logger,
 	}

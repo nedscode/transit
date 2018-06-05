@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nedscode/transit/proto"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -26,6 +27,8 @@ const (
 type Inboxes struct {
 	ctx context.Context
 	mu  sync.RWMutex
+
+	logger logrus.FieldLogger
 
 	// iderator is a monotonically incrementing id generator.
 	iderator *iderator
@@ -81,13 +84,16 @@ type inboxDetail struct {
 var _ Inbox = (*inboxDetail)(nil)
 
 // New creates a new set of Inboxes.
-func New(ctx context.Context, factory InboxFactory, mode SyncMode) *Inboxes {
+func New(ctx context.Context, logger logrus.FieldLogger, factory InboxFactory, mode SyncMode) *Inboxes {
 	if factory == nil {
 		factory = MemoryInboxFactory(100, 0)
 	}
 
+	logger = logger.WithField("prefix", "inboxes")
+
 	return &Inboxes{
 		ctx:      ctx,
+		logger:   logger,
 		iderator: &iderator{},
 		factory:  factory,
 		boxes:    map[string]*inboxDetail{},
