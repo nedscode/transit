@@ -45,8 +45,8 @@ func main() {
 	
 	// Boot up the gRPC server listening on the listener port,
 	// and using our handler to handle requests.
-	server := grpc.NewServer()
-	transit.RegisterTransitServer(server, handler)
-	panic(server.Serve(listener))
+	gServer := grpc.NewServer()
+	transit.RegisterTransitServer(gServer, handler)
+	panic(gServer.Serve(listener))
 }
 ```

@@ -14,17 +14,50 @@ backed inboxes.
 ## Usage
 
 ```go
-inboxes := New(nil)
+package main
 
-inbox := inboxes.Inbox("foo.bar", "my-group", nil)
+import (
+	"context"
+	
+	"github.com/sirupsen/logrus"
+	
+	"github.com/nedscode/transit/lib/inboxes"
+	"github.com/nedscode/transit/proto"
+)
 
-inboxes.Add(&Entry{
-	Topic: "foo.bar.baz", 
-	Instance: "123",
-})
-
-entry := inbox.Next()
-if entry != nil {
-	inbox.Ack(entry.ID)
+func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	
+	logger := logrus.New()
+	
+	boxes := inboxes.New(ctx, logger, nil, inboxes.SyncNone)
+	
+	prefix := "foo.bar"
+	group := "my-group"
+	inbox := boxes.Inbox(prefix, group, nil)
+	boxes.Add(inboxes.Wrap(&transit.Entry{
+		Topic: "foo.bar.baz", 
+		Identity: "123",
+	}))
+	
+	entry, changed := inbox.Next(inboxes.AcceptAny)
+	if entry != nil {
+		inbox.Ack(&transit.Acknowledgement{
+			Sub: &transit.Sub{
+				Prefix: prefix,
+				Group:  group,
+				ID:     entry.ID,
+			},
+			Ack: true,
+		})
+		
+		select {
+		case <-changed:
+			logger.Info("Entry was ACKed")
+		default:
+			logger.Warn("Entry should have been changed by ACK, but wasn't")
+		}
+	}
 }
 ```
