@@ -20,24 +20,24 @@ import (
 )
 
 func main() {
-    params, err := connect.ParseURI("transit://127.0.0.1:9105/myKey", nil)
-    if err != nil {
-        panic(err)
-    }
-
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-
-    _, client, err := connect.EstablishGRPC(ctx, params)
-    if err != nil {
-        panic(err)
-    }
-
-    pong, err := client.Ping(ctx, &transit.Pong{})
-    if err != nil {
-        panic(err)
-    }
-    
-    fmt.Println("Got pong", pong)
+	params, err := connect.ParseURI("transit://127.0.0.1:9105/myKey", nil)
+	if err != nil {
+		panic(err)
+	}
+	
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	
+	_, client, err := connect.EstablishGRPC(ctx, params)
+	if err != nil {
+		panic(err)
+	}
+	
+	pong, err := client.Ping(ctx, &transit.Pong{})
+	if err != nil {
+		panic(err)
+	}
+	
+	fmt.Println("Got pong", pong)
 }
 ```

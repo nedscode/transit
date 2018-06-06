@@ -26,23 +26,23 @@ func main() {
 	defer cancel()
 	
 	logger := logrus.New()
-    
-	// Start a new standalone raft server.
-    store := raft.New("ID1", ":9001", "data/", true, logger)
-    err := store.Start(context.Background(), false)
+	
+	// Start a new standalone raft server. 
+	store := raft.New("ID1", ":9001", "data/", true, logger)
+	err := store.Start(context.Background(), false)
 	if err != nil {
 		panic(err)
 	}
-    
-    // Create a new handler
+	
+	// Create a new handler
 	handler := server.New(ctx, logger, store, inboxes.SyncNone)
-    
-	// Open a listener locally on the given port.
-    listener, err := net.Listen("tcp", ":9005")
-    if err != nil {
-        panic(err)
-    }
-
+	
+	// Open a listener locally on the given port. 
+	listener, err := net.Listen("tcp", ":9005")
+	if err != nil {
+		panic(err)
+	}
+	
 	// Boot up the gRPC server listening on the listener port,
 	// and using our handler to handle requests.
 	server := grpc.NewServer()

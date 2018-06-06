@@ -14,17 +14,17 @@ backed inboxes.
 ## Usage
 
 ```go
-    inboxes := New(nil)
-    
-    inbox := inboxes.Inbox("foo.bar", "my-group", nil)
-    
-    inboxes.Add(&Entry{
-    	Topic: "foo.bar.baz",
-    	Instance: "123",
-    })
-    
-    entry := inbox.Next()
-    if entry != nil {
-        inbox.Ack(entry.ID)
-    }
-```   
+inboxes := New(nil)
+
+inbox := inboxes.Inbox("foo.bar", "my-group", nil)
+
+inboxes.Add(&Entry{
+	Topic: "foo.bar.baz", 
+	Instance: "123",
+})
+
+entry := inbox.Next()
+if entry != nil {
+	inbox.Ack(entry.ID)
+}
+```
