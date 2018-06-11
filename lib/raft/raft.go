@@ -3,7 +3,6 @@ package raft
 // Based on reference implementation at https://github.com/otoolep/hraftd
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -21,7 +20,7 @@ import (
 
 	"github.com/hashicorp/raft"
 	"github.com/hashicorp/raft-boltdb"
-	"github.com/sirupsen/logrus"
+	"github.com/norganna/logeric"
 
 	"github.com/nedscode/transit/lib/secret"
 )
@@ -41,7 +40,7 @@ type Command struct {
 }
 
 // New returns a new Store.
-func New(id, bind, dataDir string, bootstrap bool, logger logrus.FieldLogger) *Store {
+func New(id, bind, dataDir string, bootstrap bool, logger logeric.FieldLogger) *Store {
 	logger = logger.WithField("prefix", "raft-store")
 
 	return &Store{
@@ -66,44 +65,12 @@ type Store struct {
 	mu      sync.RWMutex
 	m       map[string]string
 	raft    *raft.Raft
-	logger  logrus.FieldLogger
+	logger  logeric.FieldLogger
 }
 
 type storer interface {
 	raft.LogStore
 	raft.StableStore
-}
-
-type logrusAdaptor struct {
-	logger logrus.FieldLogger
-}
-
-func (l *logrusAdaptor) Write(p []byte) (n int, err error) {
-	line := bytes.SplitN(p, []byte{' '}, 4)
-	level := string(line[2])
-	text := line[3]
-
-	var prefix []byte
-	if c := bytes.Index(text, []byte{':'}); c > 0 && c+1 == bytes.Index(text, []byte{' '}) {
-		prefix = text[0:c]
-		text = text[c+1:]
-	}
-
-	logger := l.logger
-	if len(prefix) > 0 {
-		logger = logger.WithField("prefix", string(prefix))
-	}
-
-	out := strings.Trim(string(text), " \t\r\n")
-	switch level {
-	case "[DEBUG]":
-		logger.Debug(out)
-	case "[INFO]", "[WARN]":
-		logger.Info(out)
-	default:
-		logger.Warn(out)
-	}
-	return len(p), nil
 }
 
 // Start begins the raft server.
@@ -115,9 +82,7 @@ func (s *Store) Start(ctx context.Context, persist bool) error {
 	config.NotifyCh = notifyChan
 	address := strings.Split(s.id, ":")[0]
 
-	config.LogOutput = &logrusAdaptor{
-		logger: s.logger,
-	}
+	config.LogOutput = s.logger.WriterAdaptor()
 
 	go func() {
 		var peerList string

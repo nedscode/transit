@@ -2,10 +2,9 @@ package cli
 
 import (
 	"fmt"
+	"strconv"
 
 	"google.golang.org/grpc"
-
-	"strconv"
 
 	"github.com/nedscode/transit/proto"
 )

@@ -11,6 +11,7 @@ import (
 	"path"
 	"time"
 
+	"github.com/norganna/logeric"
 	"github.com/rakyll/statik/fs"
 	"github.com/sirupsen/logrus"
 
@@ -42,15 +43,15 @@ type Config struct {
 	ctx       context.Context
 	clusterID string
 	log       *logrus.Logger
-	logger    logrus.FieldLogger
+	logger    logeric.FieldLogger
 	raft      *raft.Store
 	certs     *certs.Store
 	node      transit.TransitClient
 }
 
 // New will create a new CLI configuration.
-func New(ctx context.Context, log *logrus.Logger) *Config {
-	logger := log.WithField("prefix", "cli")
+func New(ctx context.Context, log *logrus.Logger, logger logeric.FieldLogger) *Config {
+	logger = logger.WithField("prefix", "cli")
 
 	return &Config{
 		ctx:    ctx,

@@ -16,19 +16,19 @@ import (
 	"time"
 
 	"github.com/minio/minio/cmd/logger"
-	"github.com/sirupsen/logrus"
+	"github.com/norganna/logeric"
 	"google.golang.org/grpc/credentials"
 )
 
 // Store is a store for the certificates
 type Store struct {
-	logger logrus.FieldLogger
+	logger logeric.FieldLogger
 	cert   tls.Certificate
 	pool   *x509.CertPool
 }
 
 // New returns a new certificate store.
-func New(logger logrus.FieldLogger) *Store {
+func New(logger logeric.FieldLogger) *Store {
 	logger = logger.WithField("prefix", "certs")
 
 	return &Store{

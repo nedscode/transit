@@ -4,11 +4,13 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/norganna/logeric"
 	"github.com/sirupsen/logrus/hooks/test"
 )
 
 func TestStore_Apply(t *testing.T) {
-	logger, _ := test.NewNullLogger()
+	log, _ := test.NewNullLogger()
+	logger, _ := logeric.New(log)
 
 	tests := []struct {
 		name string

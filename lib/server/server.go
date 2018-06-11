@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/norganna/logeric"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -19,7 +19,7 @@ import (
 // Backend is a TransitServer handler
 type Backend struct {
 	mu     *sync.RWMutex
-	logger logrus.FieldLogger
+	logger logeric.FieldLogger
 	store  *raft.Store
 	inbox  *inboxes.Inboxes
 	otp    *otpStore
@@ -36,7 +36,7 @@ var (
 )
 
 // New creates a new Backend for use as a transit handler
-func New(ctx context.Context, logger logrus.FieldLogger, store *raft.Store, mode inboxes.SyncMode) *Backend {
+func New(ctx context.Context, logger logeric.FieldLogger, store *raft.Store, mode inboxes.SyncMode) *Backend {
 	logger = logger.WithField("prefix", "handler")
 
 	return &Backend{
@@ -165,7 +165,7 @@ func (b *Backend) Subscribe(d *transit.Subscription, s transit.Transit_Subscribe
 	subscriber.maxAge = d.MaxAge
 
 	box := b.inbox.Inbox(d.Prefix, d.Group, nil)
-	logger = logger.WithFields(logrus.Fields{
+	logger = logger.WithFields(logeric.Fields{
 		"prefix": d.Prefix,
 		"group":  d.Group,
 	})

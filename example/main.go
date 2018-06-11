@@ -8,13 +8,13 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/ptypes"
+	"github.com/norganna/logeric"
 
 	"github.com/nedscode/transit/lib/client"
 	"github.com/nedscode/transit/lib/connect"
 
 	// This contains the Bar proto message which is used as in the example below.
 	"github.com/nedscode/transit/example/bar"
-	"github.com/norganna/logeric"
 )
 
 func main() {
@@ -26,7 +26,6 @@ func main() {
 	flag.Parse()
 
 	logger, _ := logeric.New(nil)
-	logger.Ordered(true)
 
 	if uri == "" {
 		logger.Fatal("Supply a connection uri with `-cluster`.")
@@ -104,10 +103,10 @@ func main() {
 		logger.WithError(err).Fatal("Error waiting for publish result")
 	}
 
-	logger.WithFields(logeric.Fields{
-		"id":      p.ID,
-		"concern": p.Concern(),
-		"error":   p.Err(),
+	logger.WithFieldList(logeric.FieldList{
+		{"id", p.ID()},
+		{"concern", p.Concern()},
+		{"error", p.Err()},
 	}).Info("Published my entry")
 
 	// The handler will take a single message from the queue, acking it when the handler finishes.
@@ -121,15 +120,15 @@ func main() {
 		err = ptypes.UnmarshalAny(e.Message, dyn)
 		if err == nil {
 			// Process message
-			logger.WithFields(logeric.Fields{
-				"topic": e.Topic,
-				"id":    e.ID,
+			logger.WithFieldList(logeric.FieldList{
+				{"topic", e.Topic},
+				{"id", e.ID},
 			}).Info("Hey! I just got an entry")
 
 			if v, ok := dyn.Message.(*bar.Bar); ok {
-				logger.WithFields(logeric.Fields{
-					"topic": e.Topic,
-					"baz":   v.Baz,
+				logger.WithFieldList(logeric.FieldList{
+					{"topic", e.Topic},
+					{"baz", v.Baz},
 				}).Infof("My Bar arrived")
 			}
 		}

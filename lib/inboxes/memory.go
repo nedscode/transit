@@ -6,8 +6,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/norganna/logeric"
+
 	"github.com/nedscode/transit/proto"
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -16,7 +17,7 @@ const (
 )
 
 // MemoryInboxFactory is an in-memory inbox generator function.
-func MemoryInboxFactory(logger logrus.FieldLogger, capacity, max uint64) InboxFactory {
+func MemoryInboxFactory(logger logeric.FieldLogger, capacity, max uint64) InboxFactory {
 	if max == 0 {
 		max = DefaultMaxInboxCapacity
 	}
@@ -29,7 +30,7 @@ func MemoryInboxFactory(logger logrus.FieldLogger, capacity, max uint64) InboxFa
 }
 
 // NewMemoryInbox creates a new MemoryInbox.
-func NewMemoryInbox(ctx context.Context, logger logrus.FieldLogger, capacity, max uint64) *MemoryInbox {
+func NewMemoryInbox(ctx context.Context, logger logeric.FieldLogger, capacity, max uint64) *MemoryInbox {
 	logger = logger.WithField("prefix", "memory-inbox")
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -60,7 +61,7 @@ type MemoryInbox struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	logger logrus.FieldLogger
+	logger logeric.FieldLogger
 
 	// Circular list of items, auto grows `capacity` (by `step`) to `max` capacity.
 	items   []*EntryWrap

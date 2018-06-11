@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/norganna/formatrus"
+	"github.com/norganna/logeric"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 
@@ -18,16 +19,21 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	logger := logrus.New()
+	log := logrus.New()
 	formatter := formatrus.New()
-	logger.Formatter = formatter
+	log.Formatter = formatter
 	formatter.
 		Order(100, "req").
 		Order(90, "id").
 		Order(-100, "ret", "res")
 	formatter.ParagraphBlock = true
 
-	c := cli.New(ctx, logger)
+	logger, err := logeric.New(log)
+	if err != nil {
+		panic(err)
+	}
+
+	c := cli.New(ctx, log, logger)
 	c.AddFlags()
 	c.Parse()
 
@@ -45,8 +51,8 @@ func main() {
 		args = args[1:]
 	}
 
-	err := c.Exec(command, args)
+	err = c.Exec(command, args)
 	if err != nil {
-		logger.WithError(err).Fatal("Failed to execute command")
+		log.WithError(err).Fatal("Failed to execute command")
 	}
 }

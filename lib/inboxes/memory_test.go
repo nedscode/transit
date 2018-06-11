@@ -7,8 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nedscode/transit/proto"
+	"github.com/norganna/logeric"
 	"github.com/sirupsen/logrus/hooks/test"
+
+	"github.com/nedscode/transit/proto"
 )
 
 func findIn(in []*EntryWrap, x *EntryWrap) int {
@@ -34,7 +36,8 @@ func getOrder(base []*EntryWrap, from []*EntryWrap) string {
 }
 
 func TestMemoryGrow(t *testing.T) {
-	logger, _ := test.NewNullLogger()
+	log, _ := test.NewNullLogger()
+	logger, _ := logeric.New(log)
 
 	in := NewMemoryInbox(context.Background(), logger, 10, 100)
 	base := []*EntryWrap{{}, {}, {}, {}, {}, {}, {}, {}, {}, {}}
@@ -83,7 +86,8 @@ func TestMemoryGrow(t *testing.T) {
 }
 
 func TestMemoryGrowWrap(t *testing.T) {
-	logger, _ := test.NewNullLogger()
+	log, _ := test.NewNullLogger()
+	logger, _ := logeric.New(log)
 
 	in := NewMemoryInbox(context.Background(), logger, 10, 100)
 	base := []*EntryWrap{{}, {}, {}, {}, {}, {}, {}, {}, {}, {}}
@@ -137,7 +141,8 @@ func TestMemoryInbox(t *testing.T) {
 	group := "test"
 	identity := "123"
 
-	logger, _ := test.NewNullLogger()
+	log, _ := test.NewNullLogger()
+	logger, _ := logeric.New(log)
 
 	ctx := context.Background()
 	ib := New(ctx, logger, nil, SyncSend)
@@ -173,7 +178,8 @@ func TestMemoryNotBefore(t *testing.T) {
 	group := "test"
 	identity := "123"
 
-	logger, _ := test.NewNullLogger()
+	log, _ := test.NewNullLogger()
+	logger, _ := logeric.New(log)
 
 	ctx := context.Background()
 	ib := New(ctx, logger, nil, SyncSend)
@@ -199,7 +205,8 @@ func TestMemoryNotAfter(t *testing.T) {
 	group := "test"
 	identity := "123"
 
-	logger, _ := test.NewNullLogger()
+	log, _ := test.NewNullLogger()
+	logger, _ := logeric.New(log)
 
 	ctx := context.Background()
 	ib := New(ctx, logger, nil, SyncSend)
@@ -227,7 +234,8 @@ func TestMemoryConcern(t *testing.T) {
 	group := "test"
 	identity := "123"
 
-	logger, _ := test.NewNullLogger()
+	log, _ := test.NewNullLogger()
+	logger, _ := logeric.New(log)
 
 	ctx := context.Background()
 	ib := New(ctx, logger, nil, SyncSend)

@@ -9,8 +9,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/norganna/logeric"
+
 	"github.com/nedscode/transit/proto"
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -28,7 +29,7 @@ type Inboxes struct {
 	ctx context.Context
 	mu  sync.RWMutex
 
-	logger logrus.FieldLogger
+	logger logeric.FieldLogger
 
 	// iderator is a monotonically incrementing id generator.
 	iderator *iderator
@@ -86,7 +87,7 @@ type inboxDetail struct {
 var _ Inbox = (*inboxDetail)(nil)
 
 // New creates a new set of Inboxes.
-func New(ctx context.Context, logger logrus.FieldLogger, factory InboxFactory, mode SyncMode) *Inboxes {
+func New(ctx context.Context, logger logeric.FieldLogger, factory InboxFactory, mode SyncMode) *Inboxes {
 	logger = logger.WithField("prefix", "inboxes")
 
 	if factory == nil {

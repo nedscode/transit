@@ -4,8 +4,9 @@ import (
 	"crypto/tls"
 	"time"
 
-	"github.com/nedscode/transit/lib/connect"
 	"github.com/norganna/logeric"
+
+	"github.com/nedscode/transit/lib/connect"
 )
 
 // ConnectOption is a function that can modify connection options within the client.
