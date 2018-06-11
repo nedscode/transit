@@ -92,11 +92,11 @@ func URI(uri string) ConnectOption {
 	}
 }
 
-// Logrus allows specification of a logrus logger.
+// Logger allows specification of a generic logger.
 func Logger(logger interface{}) ConnectOption {
 	return func(c *Client) (err error) {
 		c.logger, err = logeric.New(logger)
-		return nil
+		return err
 	}
 }
 
