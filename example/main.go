@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"time"
@@ -15,6 +14,7 @@ import (
 
 	// This contains the Bar proto message which is used as in the example below.
 	"github.com/nedscode/transit/example/bar"
+	"github.com/norganna/logeric"
 )
 
 func main() {
@@ -25,22 +25,25 @@ func main() {
 	flag.StringVar(&uri, "cluster", uri, "The cluster URI (defaults to contents of data/cluster)")
 	flag.Parse()
 
+	logger, _ := logeric.New(nil)
+	logger.Ordered(true)
+
 	if uri == "" {
-		fmt.Println("Supply a connection uri with `-cluster`.")
-		os.Exit(1)
+		logger.Fatal("Supply a connection uri with `-cluster`.")
 	}
 
 	tc, err := transit.Connect(
 		context.Background(),
 		transit.URI(uri),
+		transit.Logger(logger),
 	)
 	if err != nil {
 		if err == connect.ErrIncorrectTokenType {
-			fmt.Println("You have provided a cluster token to connect as a client, please use a master token.")
+			logger.Info("You have provided a cluster token to connect as a client, please use a master token.")
 			os.Exit(1)
 		}
 
-		panic(err)
+		logger.WithError(err).Panic("Could not connect to Transit server")
 	}
 
 	// In this example, we are subscribing to any message prefixed by `foo.bar` into a persistent
@@ -60,14 +63,14 @@ func main() {
 		transit.Delivery(transit.Ignore),        // Sets (or changes) the global delivery strategy for the queue
 	)
 	if err != nil {
-		panic(err)
+		logger.WithError(err).Panic("Failed to subscribe")
 	}
 
 	message, err := ptypes.MarshalAny(&bar.Bar{
 		Baz: "xyz",
 	})
 	if err != nil {
-		panic(err)
+		logger.WithError(err).Fatal("Could not marshal message to Any")
 	}
 
 	notBefore := time.Now().Add(10 * time.Second)
@@ -98,10 +101,14 @@ func main() {
 
 	p.Done(true)
 	if err = p.Err(); err != nil {
-		panic(err)
+		logger.WithError(err).Fatal("Error waiting for publish result")
 	}
 
-	fmt.Printf("Published my entry, got ID %d, concern %d, err %#v\n", p.ID(), p.Concern(), p.Err())
+	logger.WithFields(logeric.Fields{
+		"id":      p.ID,
+		"concern": p.Concern(),
+		"error":   p.Err(),
+	}).Info("Published my entry")
 
 	// The handler will take a single message from the queue, acking it when the handler finishes.
 	// If the handler returns an error, the process stops and the error is returned to the main
@@ -114,15 +121,21 @@ func main() {
 		err = ptypes.UnmarshalAny(e.Message, dyn)
 		if err == nil {
 			// Process message
-			fmt.Printf("Hey! I just got a %s #%d\n", e.Topic, e.ID)
+			logger.WithFields(logeric.Fields{
+				"topic": e.Topic,
+				"id":    e.ID,
+			}).Info("Hey! I just got an entry")
 
 			if v, ok := dyn.Message.(*bar.Bar); ok {
-				fmt.Printf("My %s arrived with a baz of %s\n", e.Topic, v.Baz)
+				logger.WithFields(logeric.Fields{
+					"topic": e.Topic,
+					"baz":   v.Baz,
+				}).Infof("My Bar arrived")
 			}
 		}
 		return transit.ErrShuttingDown
 	})
 	if err != nil && err != transit.ErrShuttingDown {
-		panic(err)
+		logger.WithError(err).Panic("Error with subscription")
 	}
 }

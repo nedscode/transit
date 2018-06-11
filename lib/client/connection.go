@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/nedscode/transit/lib/connect"
+	"github.com/norganna/logeric"
 )
 
 // ConnectOption is a function that can modify connection options within the client.
@@ -88,6 +89,14 @@ func URI(uri string) ConnectOption {
 	return func(c *Client) error {
 		_, err := connect.ParseURI(uri, c.params)
 		return err
+	}
+}
+
+// Logrus allows specification of a logrus logger.
+func Logger(logger interface{}) ConnectOption {
+	return func(c *Client) (err error) {
+		c.logger, err = logeric.New(logger)
+		return nil
 	}
 }
 

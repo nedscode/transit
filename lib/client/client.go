@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/norganna/logeric"
 	"google.golang.org/grpc"
 
 	"github.com/nedscode/transit/lib/connect"
@@ -22,6 +23,8 @@ type Client struct {
 	cancel context.CancelFunc
 	conn   *grpc.ClientConn
 	client pb.TransitClient
+
+	logger *logeric.Log
 
 	poolSem   chan bool
 	poolItems chan *Pub
@@ -104,6 +107,13 @@ func Connect(ctx context.Context, opts ...ConnectOption) (*Client, error) {
 
 	if len(client.params.Peers) == 0 {
 		return nil, ErrNoPeers
+	}
+
+	if client.logger == nil {
+		client.logger, err = logeric.New(nil)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	err = client.peerConnect()

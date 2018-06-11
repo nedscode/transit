@@ -151,10 +151,17 @@ func (c *Client) Subscribe(prefix, group string, opts ...SubOption) (*SubStream,
 			case <-sub.sem:
 				s, err := sc.Recv()
 				if err != nil {
-					if err != nil {
-						sub.handlerErr <- err
-						break
+					for err != nil {
+						// We need to resubscribe
+						err = c.peerConnect()
+						if err == nil {
+							sc, err = c.client.Subscribe(c.ctx, sub.req)
+						}
+						if err != nil {
+							time.Sleep(500 * time.Millisecond)
+						}
 					}
+					break
 				}
 
 				err = sub.handler(s.Entry)

@@ -62,7 +62,9 @@ require (
 	github.com/nats-io/go-nats-streaming v0.4.0
 	github.com/nats-io/nats v1.5.0
 	github.com/nats-io/nuid v1.0.0
+	github.com/norganna/erroneous v1.0.0
 	github.com/norganna/formatrus v1.0.3
+	github.com/norganna/logeric v1.0.5
 	github.com/norganna/trit v1.1.3
 	github.com/olekukonko/tablewriter v0.0.0-20180506121414-d4647c9c7a84
 	github.com/pelletier/go-toml v1.2.0
