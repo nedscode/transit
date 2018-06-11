@@ -65,8 +65,10 @@ type InboxFactory func(ctx context.Context) Inbox
 // Inbox is a place to accumulate message entries for a group.
 type Inbox interface {
 	Add(*EntryWrap) bool
-	Next(Subscriber) (*EntryWrap, <-chan bool)
+	Next(context.Context, Subscriber) (*EntryWrap, <-chan bool)
 	Ack(*transit.Acknowledgement) *EntryWrap
+
+	Strategy(*Strategy) (updated Strategy, changed bool)
 }
 
 type inboxDetail struct {
@@ -85,11 +87,11 @@ var _ Inbox = (*inboxDetail)(nil)
 
 // New creates a new set of Inboxes.
 func New(ctx context.Context, logger logrus.FieldLogger, factory InboxFactory, mode SyncMode) *Inboxes {
-	if factory == nil {
-		factory = MemoryInboxFactory(100, 0)
-	}
-
 	logger = logger.WithField("prefix", "inboxes")
+
+	if factory == nil {
+		factory = MemoryInboxFactory(logger, 100, 0)
+	}
 
 	return &Inboxes{
 		ctx:      ctx,

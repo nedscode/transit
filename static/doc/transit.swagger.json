@@ -211,31 +211,33 @@
           },
           {
             "name": "distribution",
-            "description": "Distribution specifies what additional messages you want to receive other than your Allotted messages.\n\n - Arbitrary: Arbitrary distribution means that any processor may get any message.\n - Requested: Requested distribution limits messages to processors that have requested type of the specific lot.\n - Assigned: Assigned distribution will assign unrequested lots to processors based on load.",
+            "description": "Distribution specifies what additional messages you want to receive other than your Allotted messages.\n\n - Default: Default uses the default strategy of the group.\n - Arbitrary: Arbitrary distribution means that any processor may get any message.\n - Requested: Requested distribution limits messages to processors that have requested type of the specific lot.\n - Assigned: Assigned distribution will assign unrequested lots to processors based on load (Arbitrary ∧ Requested).",
             "in": "query",
             "required": false,
             "type": "string",
             "enum": [
+              "Default",
               "Arbitrary",
               "Requested",
               "Assigned"
             ],
-            "default": "Arbitrary"
+            "default": "Default"
           },
           {
             "name": "delivery",
-            "description": "Delivery specifies how you want duplicate entries in the queue to be dealt with (queue-wide option).\n\n - Concurrent: Concurrent messages are not treated specially.\n - Drop: Drop means if there's currently one waiting, don't bother with this one and drop it.\n - Replace: Replace means if there's currently one waiting, replace it with this one.\n - Ignore: Ignore means if there's currently one waiting, delete it and place this one at the back of the queue.\n - Serial: A Serial message will not begin processing a duplicate identity message at the same time as another.",
+            "description": "Delivery specifies how you want duplicate entries in the queue to be dealt with (queue-wide option).\n\n - Unspecified: Unspecified uses the current strategy (default = Concurrent).\n - Concurrent: Concurrent messages are not treated specially.\n - Drop: Drop means if there's currently one waiting, don't bother with this one and drop it.\n - Replace: Replace means if there's currently one waiting, replace it with this one.\n - Ignore: Ignore means if there's currently one waiting, delete it and place this one at the back of the queue.\n - Serial: A Serial message will not begin processing a duplicate identity message at the same time as another.",
             "in": "query",
             "required": false,
             "type": "string",
             "enum": [
+              "Unspecified",
               "Concurrent",
               "Drop",
               "Replace",
               "Ignore",
               "Serial"
             ],
-            "default": "Concurrent"
+            "default": "Unspecified"
           }
         ],
         "tags": [
@@ -289,29 +291,31 @@
         "Processed"
       ],
       "default": "None",
-      "description": "Concern is the level of write concern you wish to achieve when publishing.\n\n - None: None indicates you just want to be delivered and don't care about it at all, you won't get back an ID.\n - Received: Received waits for the message to be received by the server and gets the ID back.\n - Delivered: Delivered waits for the message to be delivered to the server and inserted into all inboxes.\n - Confirmed: Confirmed means that the message has been delivered and is confirmed in the queues of existing slave servers.\nThis is not currently implmented and is the same as Delivered currently.\n - Processed: Processed requires that the server has delivered the entry to all subscribers and they in turn have ACKed it."
+      "description": "Concern is the level of write concern you wish to achieve when publishing.\n\n - None: None indicates you just want to be delivered and don't care about it at all, you won't get back an ID.\n - Received: Received waits for the message to be received by the server and gets the ID back.\n - Delivered: Delivered waits for the message to be delivered to the server and inserted into all inboxes.\n - Confirmed: Confirmed means that the message has been delivered and is confirmed in the queues of existing slave servers.\nThis is not currently implemented and is the same as Delivered currently.\n - Processed: Processed requires that the server has delivered the entry to all subscribers and they in turn have ACKed it."
     },
     "DeliveryStrategy": {
       "type": "string",
       "enum": [
+        "Unspecified",
         "Concurrent",
         "Drop",
         "Replace",
         "Ignore",
         "Serial"
       ],
-      "default": "Concurrent",
-      "description": " - Concurrent: Concurrent messages are not treated specially.\n - Drop: Drop means if there's currently one waiting, don't bother with this one and drop it.\n - Replace: Replace means if there's currently one waiting, replace it with this one.\n - Ignore: Ignore means if there's currently one waiting, delete it and place this one at the back of the queue.\n - Serial: A Serial message will not begin processing a duplicate identity message at the same time as another."
+      "default": "Unspecified",
+      "description": " - Unspecified: Unspecified uses the current strategy (default = Concurrent).\n - Concurrent: Concurrent messages are not treated specially.\n - Drop: Drop means if there's currently one waiting, don't bother with this one and drop it.\n - Replace: Replace means if there's currently one waiting, replace it with this one.\n - Ignore: Ignore means if there's currently one waiting, delete it and place this one at the back of the queue.\n - Serial: A Serial message will not begin processing a duplicate identity message at the same time as another."
     },
     "DistributionStrategy": {
       "type": "string",
       "enum": [
+        "Default",
         "Arbitrary",
         "Requested",
         "Assigned"
       ],
-      "default": "Arbitrary",
-      "description": " - Arbitrary: Arbitrary distribution means that any processor may get any message.\n - Requested: Requested distribution limits messages to processors that have requested type of the specific lot.\n - Assigned: Assigned distribution will assign unrequested lots to processors based on load."
+      "default": "Default",
+      "description": " - Default: Default uses the default strategy of the group.\n - Arbitrary: Arbitrary distribution means that any processor may get any message.\n - Requested: Requested distribution limits messages to processors that have requested type of the specific lot.\n - Assigned: Assigned distribution will assign unrequested lots to processors based on load (Arbitrary ∧ Requested)."
     },
     "Entry": {
       "type": "object",

@@ -126,13 +126,6 @@ func (c *Client) Close() {
 // Provide the desired WriteConcern and a timeout in milliseconds.
 // This function is asynchronous and will return immediately before sending in the background.
 // If you wish to wait until the write concern has been reached, call `.Done(true)` on the result of this `Publish`.
-func (c *Client) Publish(e *Entry, concern WriteConcern, timeout uint64) *Pub {
-	return c.enqueue(&Publication{
-		Entry:   e,
-		Concern: concern,
-		Timeout: timeout,
-	})
-}
 
 func (c *Client) startPool() {
 	if c.params.PoolSize == 0 {

@@ -58,17 +58,17 @@ func (b *Backend) Ping(ctx context.Context, ping *transit.Pong) (*transit.Pong, 
 		return nil, err
 	}
 
-	ret := &transit.Pong{
+	res := &transit.Pong{
 		ID:      ping.ID,
 		Leader:  b.store.Leader(),
 		Leading: b.store.Leading(),
 	}
 
 	logger = logger.WithField("user", tokenName)
-	logger = logger.WithField("ping", ping)
+	logger = logger.WithField("req", ping)
 
-	logger.WithField("ret", ret).Debug("Sending pong")
-	return ret, nil
+	logger.WithField("res", res).Debug("Sending pong")
+	return res, nil
 }
 
 // Publish takes a message entry and returns the published message id.
@@ -85,7 +85,7 @@ func (b *Backend) Publish(ctx context.Context, p *transit.Publication) (*transit
 		return nil, err
 	}
 	logger = logger.WithField("user", tokenName)
-	logger = logger.WithField("entry", p.Entry)
+	logger = logger.WithField("req", p)
 
 	var done chan *struct{}
 
@@ -108,36 +108,38 @@ func (b *Backend) Publish(ctx context.Context, p *transit.Publication) (*transit
 		loop:
 			for {
 				select {
+				case <-waitCtx.Done():
+					break loop
 				case concern := <-monitor:
 					if concern >= p.Concern {
 						break loop
 					}
-				case <-waitCtx.Done():
-					break loop
 				}
 			}
+
 			done <- nil
 		}()
 	}
+
 	b.inbox.Add(wrap)
 
 	if done != nil {
 		<-done
 	}
 
-	ret := &transit.Published{
+	res := &transit.Published{
 		ID:      wrap.ID,
 		Concern: wrap.Concern,
 	}
-	logger.WithField("ret", ret).Debug("Published entry")
-	return ret, nil
+	logger.WithField("res", res).Debug("Published entry")
+	return res, nil
 }
 
-type subscriber struct {
-}
-
-func (s *subscriber) CanAccept(e *inboxes.EntryWrap) bool {
-	return true
+func drain(changed <-chan bool) {
+	select {
+	case <-changed:
+	default:
+	}
 }
 
 // Subscribe takes topic and group details and returns a subscription stream.
@@ -146,9 +148,11 @@ func (b *Backend) Subscribe(d *transit.Subscription, s transit.Transit_Subscribe
 		return notLeaderError
 	}
 
+	ctx := s.Context()
+
 	logger := b.logger.WithField("rpc", "subscribe")
 
-	tokenName, _, err := b.requireRoles(s.Context(), RoleOwner, RolePublisher, RoleSubscriber)
+	tokenName, _, err := b.requireRoles(ctx, RoleOwner, RolePublisher, RoleSubscriber)
 	if err != nil {
 		return err
 	}
@@ -156,23 +160,60 @@ func (b *Backend) Subscribe(d *transit.Subscription, s transit.Transit_Subscribe
 
 	logger.Debug("New subscriber")
 
-	subscriber := &subscriber{}
+	subscriber := newSubscriber(d.Allotments)
+	subscriber.delay = d.Delay
+	subscriber.maxAge = d.MaxAge
 
 	box := b.inbox.Inbox(d.Prefix, d.Group, nil)
+	logger = logger.WithFields(logrus.Fields{
+		"prefix": d.Prefix,
+		"group":  d.Group,
+	})
+
+	// Shift the bits right to normalise the group distribution field
+	groupDistribution := d.Distribution >> 6 & 0x3f
+	if strategy, changed := box.Strategy(&inboxes.Strategy{
+		Delivery:     d.Delivery,
+		Distribution: groupDistribution,
+	}); changed {
+		logger.WithField("strategy", strategy.String()).Info("Inbox strategy changed by subscriber")
+	}
+
 	running := true
 	for running {
-		wrap, changed := box.Next(subscriber)
-		s.Send(&transit.Notification{
-			Sub: &transit.Sub{
+		var sub *transit.Sub
+		wrap, changed := box.Next(ctx, subscriber)
+
+		if wrap != nil {
+			drain(changed)
+
+			logger.WithField("entry", wrap.ID).Debug("Sending entry to subscriber")
+			sub = &transit.Sub{
 				Prefix: d.Prefix,
 				Group:  d.Group,
 				ID:     wrap.ID,
-			},
-			Entry: wrap.Entry,
-		})
+			}
+			s.Send(&transit.Notification{
+				Sub:   sub,
+				Entry: wrap.Entry,
+			})
+		}
 
 		// Wait for change notification before sending a new entry
-		running = <-changed
+		select {
+		case <-ctx.Done():
+			if sub != nil {
+				box.Ack(&transit.Acknowledgement{
+					Sub:   sub,
+					Ack:   false,
+					Close: true,
+				})
+				drain(changed)
+			}
+
+			running = false
+		case running = <-changed:
+		}
 	}
 
 	return nil
@@ -193,14 +234,14 @@ func (b *Backend) Ack(ctx context.Context, p *transit.Acknowledgement) (*transit
 	}
 	logger = logger.WithField("user", tokenName)
 
-	logger = logger.WithField("sub", p)
+	logger = logger.WithField("req", p)
 
-	ret := &transit.Acked{
+	res := &transit.Acked{
 		Success: true,
 	}
 
-	logger.WithField("ret", ret).Debug("Acking entry")
-	return ret, nil
+	logger.WithField("res", res).Debug("Acking entry")
+	return res, nil
 }
 
 // ClusterApply is for applying a set of transformation commands to the cluster's state.
@@ -232,15 +273,15 @@ func (b *Backend) ClusterApply(ctx context.Context, a *transit.ApplyCommands) (*
 		}
 	}
 
-	ret := &transit.Success{}
+	res := &transit.Success{}
 	if len(errs) > 0 {
-		ret.Error = fmt.Sprintf("Errors applying commands: %s", strings.Join(errs, ", "))
+		res.Error = fmt.Sprintf("Errors applying commands: %s", strings.Join(errs, ", "))
 	} else {
-		ret.Succeed = true
+		res.Succeed = true
 	}
 
-	logger.WithField("ret", ret).Debug("Applying commands")
-	return ret, nil
+	logger.WithField("res", res).Debug("Applying commands")
+	return res, nil
 }
 
 // ClusterGetKeys returns the state values for a given set of cluster keys.
@@ -258,12 +299,12 @@ func (b *Backend) ClusterGetKeys(ctx context.Context, s *transit.Strings) (*tran
 		v := b.store.Get(k)
 		m[k] = v
 	}
-	ret := &transit.StringMap{
+	res := &transit.StringMap{
 		Values: m,
 	}
 
-	logger.WithField("ret", ret).Debug("Getting keys")
-	return ret, nil
+	logger.WithField("res", res).Debug("Getting keys")
+	return res, nil
 }
 
 // ClusterList returns a list of keys and values, with the provided prefix from the cluster.
@@ -277,12 +318,12 @@ func (b *Backend) ClusterList(ctx context.Context, s *transit.String) (*transit.
 	}
 
 	list := b.store.List(s.Value)
-	ret := &transit.StringMap{
+	res := &transit.StringMap{
 		Values: list,
 	}
 
-	logger.WithField("ret", ret).Debug("Listing keys")
-	return ret, nil
+	logger.WithField("res", res).Debug("Listing keys")
+	return res, nil
 }
 
 // ClusterJoin makes the server perform a join with the given server.
@@ -301,15 +342,15 @@ func (b *Backend) ClusterJoin(ctx context.Context, s *transit.Server) (*transit.
 	}
 
 	err = b.store.Join(s.ID, s.Address)
-	ret := &transit.Success{}
+	res := &transit.Success{}
 	if err != nil {
-		ret.Error = err.Error()
+		res.Error = err.Error()
 	} else {
-		ret.Succeed = true
+		res.Succeed = true
 	}
 
-	logger.WithField("ret", ret).Debug("Joining to cluster")
-	return ret, nil
+	logger.WithField("res", res).Debug("Joining to cluster")
+	return res, nil
 }
 
 // ClusterLeader returns the address of the current cluster leader.
@@ -322,10 +363,10 @@ func (b *Backend) ClusterLeader(ctx context.Context, v *transit.Void) (*transit.
 		return nil, err
 	}
 
-	ret := &transit.String{
+	res := &transit.String{
 		Value: b.store.Leader(),
 	}
 
-	logger.WithField("ret", ret).Debug("Returning leader")
-	return ret, nil
+	logger.WithField("res", res).Debug("Returning leader")
+	return res, nil
 }

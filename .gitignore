@@ -9,3 +9,4 @@ static/admin/
 !static/admin/.gitkeep
 *.pem
 transit.swagger.json.orig
+coverage.out

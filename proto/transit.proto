@@ -71,25 +71,31 @@ service Transit {
 }
 
 enum DistributionStrategy {
+    // Default uses the default strategy of the group.
+    Default = 0;
+
     // Arbitrary distribution means that any processor may get any message.
-    Arbitrary = 0;
+    Arbitrary = 1;
     // Requested distribution limits messages to processors that have requested type of the specific lot.
-    Requested = 1;
-    // Assigned distribution will assign unrequested lots to processors based on load.
-    Assigned = 2;
+    Requested = 2;
+    // Assigned distribution will assign unrequested lots to processors based on load (Arbitrary ∧ Requested).
+    Assigned = 3;
 }
 
 enum DeliveryStrategy {
+    // Unspecified uses the current strategy (default = Concurrent).
+    Unspecified = 0;
+
     // Concurrent messages are not treated specially.
-    Concurrent = 0;
+    Concurrent = 1;
     // Drop means if there's currently one waiting, don't bother with this one and drop it.
-    Drop = 1;
+    Drop = 2;
     // Replace means if there's currently one waiting, replace it with this one.
-    Replace = 2;
+    Replace = 3;
     // Ignore means if there's currently one waiting, delete it and place this one at the back of the queue.
-    Ignore = 3;
+    Ignore = 4;
     // A Serial message will not begin processing a duplicate identity message at the same time as another.
-    Serial = 4;
+    Serial = 5;
 }
 
 // Pong is used by Ping to check the server is alive and who the current leader is.

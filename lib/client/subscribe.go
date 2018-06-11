@@ -41,6 +41,9 @@ var ErrShuttingDown = HandlerError(errors.New("shutting down"), true, true)
 // processed. The message will be returned to the queue and the subscription will be closed.
 var ErrFatal = HandlerError(errors.New("subscription suffered fatal error"), false, true)
 
+// ErrDistStrategy is returned when the distribution strategy parameters are incorrect.
+var ErrDistStrategy = errors.New("incorrect parameters for distribution strategy option")
+
 // A SubOption is a function that can modify subscription options within the stream object.
 type SubOption func(s *SubStream) error
 
@@ -69,7 +72,7 @@ func Allot(allotments ...string) SubOption {
 // Delay sets a minimum age on potential entries that it wishes to receive.
 func Delay(duration time.Duration) SubOption {
 	return func(s *SubStream) error {
-		s.req.Delay = uint64(duration)
+		s.req.Delay = uint64(duration / time.Millisecond)
 		return nil
 	}
 }
@@ -77,15 +80,32 @@ func Delay(duration time.Duration) SubOption {
 // MaxAge specifies the oldest entry that the subscriber wishes to receive.
 func MaxAge(duration time.Duration) SubOption {
 	return func(s *SubStream) error {
-		s.req.MaxAge = uint64(duration)
+		s.req.MaxAge = uint64(duration / time.Millisecond)
 		return nil
 	}
 }
 
-// Distribution sets (or overwrites) the distribution strategy for this individual subscription.
-func Distribution(strategy DistributionStrategy) SubOption {
+// Distribution sets (or overwrites) the distribution strategy.
+// Takes one or two parameters, first is individual subscription strategy, second is the overall group strategy.
+// Either may be 0 to use default/current value.
+func Distribution(strategy ...DistributionStrategy) SubOption {
 	return func(s *SubStream) error {
-		s.req.Distribution = strategy
+		n := len(strategy)
+		if n == 0 || n > 2 {
+			return ErrDistStrategy
+		}
+		g := strategy[0]
+		if g >= 64 {
+			return ErrDistStrategy
+		}
+		if n == 2 {
+			h := strategy[1]
+			if h >= 64 {
+				return ErrDistStrategy
+			}
+			g += h << 6
+		}
+		s.req.Distribution = g
 		return nil
 	}
 }

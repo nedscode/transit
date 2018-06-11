@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/nedscode/transit/proto"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -14,7 +16,7 @@ const (
 )
 
 // MemoryInboxFactory is an in-memory inbox generator function.
-func MemoryInboxFactory(capacity, max uint64) InboxFactory {
+func MemoryInboxFactory(logger logrus.FieldLogger, capacity, max uint64) InboxFactory {
 	if max == 0 {
 		max = DefaultMaxInboxCapacity
 	}
@@ -22,14 +24,20 @@ func MemoryInboxFactory(capacity, max uint64) InboxFactory {
 		max = capacity
 	}
 	return func(ctx context.Context) Inbox {
-		return NewMemoryInbox(ctx, capacity, max)
+		return NewMemoryInbox(ctx, logger, capacity, max)
 	}
 }
 
 // NewMemoryInbox creates a new MemoryInbox.
-func NewMemoryInbox(ctx context.Context, capacity, max uint64) *MemoryInbox {
-	return &MemoryInbox{
+func NewMemoryInbox(ctx context.Context, logger logrus.FieldLogger, capacity, max uint64) *MemoryInbox {
+	logger = logger.WithField("prefix", "memory-inbox")
+
+	ctx, cancel := context.WithCancel(ctx)
+
+	box := &MemoryInbox{
 		ctx:      ctx,
+		cancel:   cancel,
+		logger:   logger,
 		items:    make([]*EntryWrap, capacity),
 		states:   make([]State, capacity),
 		changes:  make([]chan bool, capacity),
@@ -37,12 +45,22 @@ func NewMemoryInbox(ctx context.Context, capacity, max uint64) *MemoryInbox {
 		step:     capacity / 2,
 		max:      max,
 		avail:    make(chan *struct{}),
+		strategy: &Strategy{
+			Distribution: transit.DistributionStrategy_Arbitrary,
+			Delivery:     transit.DeliveryStrategy_Concurrent,
+		},
 	}
+	box.setTime = updateableTimer(ctx, box.avail)
+
+	return box
 }
 
 // MemoryInbox is a memory based inbox for super high speed throughput.
 type MemoryInbox struct {
-	ctx context.Context
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	logger logrus.FieldLogger
 
 	// Circular list of items, auto grows `capacity` (by `step`) to `max` capacity.
 	items   []*EntryWrap
@@ -57,10 +75,244 @@ type MemoryInbox struct {
 	tail     uint64
 	alive    uint64
 
+	strategy *Strategy
+
+	nextTime time.Time
+	setTime  chan<- time.Time
+
 	avail chan *struct{}
 }
 
 var _ Inbox = (*MemoryInbox)(nil)
+
+// Add inserts the entry into the inbox, growing it if required, returns false if the inbox is at maximum capacity.
+func (i *MemoryInbox) Add(entry *EntryWrap) bool {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	h := i.head
+	t := i.tail
+
+	next := (t + 1) % i.capacity
+	if next == h {
+		// Capacity reached, need to grow.
+		if !i.grow() {
+			return false
+		}
+
+		t = i.tail
+	}
+
+	i.items[t] = entry
+	i.states[t] = Ready
+	i.alive++
+	entry.CountInboxes++
+
+	i.tail = (t + 1) % i.capacity
+
+	select {
+	case i.avail <- nil:
+	default:
+	}
+
+	return true
+}
+
+// Next gets the next unsent item from the current list.
+func (i *MemoryInbox) Next(ctx context.Context, sub Subscriber) (*EntryWrap, <-chan bool) {
+	for {
+		e, c := func() (*EntryWrap, <-chan bool) {
+			i.mu.Lock()
+			defer i.mu.Unlock()
+
+			var minTime time.Time
+			next, possible := i.iterate(func(t *Strategy, e *EntryWrap, s State) (can tril) {
+				var entryTime time.Time
+
+				can = yes
+
+				if e.NotBefore+e.NotAfter > 0 {
+					now := time.Now()
+					if e.NotBefore > 0 {
+						secs := int64(e.NotBefore / 1000)
+						nanos := int64(e.NotBefore%1000) * int64(time.Millisecond)
+						unix := time.Unix(secs, nanos)
+						if now.Before(unix) {
+							// We can't receive this yet because the message is too young.
+							can = no
+							entryTime = unix
+						}
+					}
+					if e.NotAfter > 0 {
+						secs := int64(e.NotAfter / 1000)
+						nanos := int64(e.NotAfter%1000) * int64(time.Millisecond)
+						if now.After(time.Unix(secs, nanos)) {
+							// This message has passed it's expiry time (and will need to be collected).
+							e.Expired = true
+							can = no
+						}
+					}
+				}
+
+				subCan, subTime := sub.CanAccept(t, e)
+				if subCan == no && !subTime.IsZero() && subTime.After(entryTime) {
+					entryTime = subTime
+				}
+
+				can = can.And(subCan)
+
+				if !entryTime.IsZero() && (minTime.IsZero() || entryTime.Before(minTime)) {
+					minTime = entryTime
+				}
+
+				return
+			})
+
+			if !minTime.IsZero() {
+				i.setTime <- minTime
+			}
+
+			if next != nil {
+				*next.state = Sent
+			}
+
+			if len(possible) > 0 {
+				if i.strategy.Distribution != transit.DistributionStrategy_Requested {
+					next = possible[0]
+					if i.strategy.Distribution == transit.DistributionStrategy_Assigned {
+						sub.SetAllotment(next.wrap.Lot, yes)
+					}
+				}
+			}
+
+			if next != nil {
+				return next.wrap, next.change
+			}
+			return nil, nil
+		}()
+
+		if e != nil {
+			// Drain the changed channel first, in case the previous subscriber didn't.
+			select {
+			case <-c:
+			default:
+			}
+
+			return e, c
+		}
+
+		// Wait for an item to be made available.
+		select {
+		case <-i.ctx.Done():
+			return nil, nil
+		case <-ctx.Done():
+			return nil, nil
+		case <-i.avail:
+		}
+	}
+}
+
+// Ack updates the given item's completion status and allows it to be eventually removed from the inbox.
+func (i *MemoryInbox) Ack(a *transit.Acknowledgement) *EntryWrap {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
+	adjacent := true
+	advance := uint64(0)
+	found, _ := i.iterate(func(_ *Strategy, e *EntryWrap, s State) tril {
+		if e.ID == a.Sub.ID {
+			return yes // We've found the requested entry, stop processing.
+		}
+		if adjacent {
+			if e.Expired || s == Acked {
+				advance++
+			} else {
+				adjacent = false
+			}
+		}
+		return no
+	})
+
+	// Only a Sent item may be ACKed.
+	if found.state != nil && *found.state == Sent {
+		if a.Ack {
+			// Mark it as ACKed.
+			*found.state = Acked
+			i.alive--
+			found.wrap.CountAcked++
+			if adjacent {
+				advance++
+			}
+
+			// Notify that our state has changed, if anyone is listening
+			select {
+			case found.change <- !a.Close:
+			default:
+			}
+		} else {
+			// Needs to be marked as ready so it can be redelivered to another subscriber.
+			*found.state = Ready
+			i.avail <- nil
+
+			// Notify that our state has changed, if anyone is listening
+			select {
+			case found.change <- !a.Close:
+			default:
+			}
+		}
+	}
+
+	if advance > 0 {
+		i.head = (i.head + advance) % i.capacity
+	}
+
+	if found.state == nil {
+		return nil
+	}
+	return found.wrap
+}
+
+// Strategy updates (optionally) the current strategy and returns the new strategy and whether it was updated.
+func (i *MemoryInbox) Strategy(set *Strategy) (Strategy, bool) {
+	return i.strategy.Set(set)
+}
+
+type iterSelectorFunc func(*Strategy, *EntryWrap, State) tril
+type itemSelectorFunc func(*Strategy, *EntryWrap) tril
+
+type iterItem struct {
+	index  uint64
+	wrap   *EntryWrap
+	state  *State
+	change chan bool
+}
+
+// iterate over items in order until selector returns yes, then returns the selected entry.
+func (i *MemoryInbox) iterate(cb iterSelectorFunc) (found *iterItem, possible []*iterItem) {
+	for j := i.head; j < i.tail; j = (j + 1) % i.capacity {
+		e := i.items[j]
+		s := &i.states[j]
+		c := i.changes[j]
+		t := cb(i.strategy, e, *s)
+		if t == yes {
+			found = &iterItem{
+				index:  j,
+				wrap:   e,
+				state:  s,
+				change: c,
+			}
+			return
+		} else if t == maybe {
+			possible = append(possible, &iterItem{
+				index:  j,
+				wrap:   e,
+				state:  s,
+				change: c,
+			})
+		}
+	}
+	return
+}
 
 func (i *MemoryInbox) grow() bool {
 	// As part of growing, we need to choose between making the queue larger or compacting the existing items.
@@ -158,149 +410,12 @@ func (i *MemoryInbox) compact() bool {
 	return true
 }
 
-// Add inserts the entry into the inbox, growing it if required, returns false if the inbox is at maximum capacity.
-func (i *MemoryInbox) Add(entry *EntryWrap) bool {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	h := i.head
-	t := i.tail
-
-	next := (t + 1) % i.capacity
-	if next == h {
-		// Capacity reached, need to grow.
-		if !i.grow() {
-			return false
-		}
-
-		t = i.tail
-	}
-
-	i.items[t] = entry
-	i.states[t] = Ready
-	i.alive++
-	entry.CountInboxes++
-
-	i.tail = (t + 1) % i.capacity
-
-	select {
-	case i.avail <- nil:
-	default:
-	}
-
-	return true
-}
-
-type iterSelectorFunc func(*EntryWrap, State) bool
-type itemSelectorFunc func(*EntryWrap) bool
-
-// iterates over items in order until selector returns true, then returns the selected entry.
-func (i *MemoryInbox) iter(cb iterSelectorFunc) (j uint64, e *EntryWrap, s *State, c chan bool) {
-	for j = i.head; j < i.tail; j = (j + 1) % i.capacity {
-		e = i.items[j]
-		s = &i.states[j]
-		c = i.changes[j]
-		if cb(e, *s) {
-			return
-		}
-	}
-	return 0, nil, nil, nil
-}
-
 // takes an item selector function and calls it for any ready items
 func readyState(cb itemSelectorFunc) iterSelectorFunc {
-	return func(e *EntryWrap, s State) bool {
+	return func(t *Strategy, e *EntryWrap, s State) tril {
 		if s == Ready {
-			return cb(e)
+			return cb(t, e)
 		}
-		return false
+		return no
 	}
-}
-
-// Next gets the next unsent item from the current list.
-func (i *MemoryInbox) Next(sub Subscriber) (*EntryWrap, <-chan bool) {
-	for {
-		e, c := func() (*EntryWrap, <-chan bool) {
-			i.mu.Lock()
-			defer i.mu.Unlock()
-
-			_, e, s, c := i.iter(readyState(sub.CanAccept))
-
-			if s != nil {
-				*s = Sent
-			}
-
-			return e, c
-		}()
-
-		if e != nil {
-			return e, c
-		}
-
-		// Wait for an item to be made available.
-		select {
-		case <-i.avail:
-		case <-i.ctx.Done():
-			return nil, nil
-		}
-	}
-}
-
-// Ack updates the given item's completion status and allows it to be eventually removed from the inbox.
-func (i *MemoryInbox) Ack(a *transit.Acknowledgement) *EntryWrap {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	adjacent := true
-	advance := uint64(0)
-	_, wrap, state, change := i.iter(func(e *EntryWrap, s State) bool {
-		if e.ID == a.Sub.ID {
-			return true // We've found the requested entry, stop processing.
-		}
-		if adjacent {
-			if s == Acked {
-				advance++
-			} else {
-				adjacent = false
-			}
-		}
-		return false
-	})
-
-	// Only a Sent item may be ACKed.
-	if state != nil && *state == Sent {
-		if a.Ack {
-			// Mark it as ACKed.
-			*state = Acked
-			i.alive--
-			wrap.CountAcked++
-			if adjacent {
-				advance++
-			}
-
-			// Notify that our state has changed, if anyone is listening
-			select {
-			case change <- !a.Close:
-			default:
-			}
-		} else {
-			// Needs to be marked as ready so it can be redelivered to another subscriber.
-			*state = Ready
-
-			// Notify that our state has changed, if anyone is listening
-			select {
-			case change <- !a.Close:
-			default:
-			}
-		}
-	}
-
-	if advance > 0 {
-		i.head = (i.head + advance) % i.capacity
-	}
-
-	if state == nil {
-		return nil
-	}
-	return wrap
 }

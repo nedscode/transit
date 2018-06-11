@@ -1,6 +1,10 @@
 package inboxes
 
-import "github.com/nedscode/transit/proto"
+import (
+	"time"
+
+	"github.com/nedscode/transit/proto"
+)
 
 // EntryWrap wraps an Entry for extra internal fields.
 type EntryWrap struct {
@@ -8,7 +12,9 @@ type EntryWrap struct {
 
 	CountInboxes uint64
 	CountAcked   uint64
+	Inserted     time.Time
 	Notified     bool
+	Expired      bool
 	Concern      transit.Concern
 	Updated      chan transit.Concern
 }
@@ -31,6 +37,7 @@ func (e *EntryWrap) SetConcern(c transit.Concern) {
 // Wrap takes an Entry and wraps it into an EntryWrap.
 func Wrap(entry *transit.Entry) *EntryWrap {
 	return &EntryWrap{
-		Entry: entry,
+		Entry:    entry,
+		Inserted: time.Now(),
 	}
 }

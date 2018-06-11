@@ -70,17 +70,8 @@ func main() {
 		panic(err)
 	}
 
-	notBefore := time.Now().Add(10*time.Second).Unix() / int64(time.Millisecond)
-	notAfter := time.Now().Add(30*time.Second).UnixNano() / int64(time.Millisecond)
-
-	e := &transit.Entry{
-		Topic:     "foo.bar.baz",
-		Lot:       "abc",             // Used to determine distribution allotment
-		Identity:  "123",             // Used to determine replacement and parallel delivery strategy
-		Message:   message,           // The Any that is the message
-		NotBefore: uint64(notBefore), // Message must wait for this long in the queue
-		NotAfter:  uint64(notAfter),  // Message must be processed before this time has elapsed
-	}
+	notBefore := time.Now().Add(10 * time.Second)
+	notAfter := time.Now().Add(30 * time.Second)
 
 	// This will publish a `&Bar` object into the `foo.bar`/`transactions` queue with a unique
 	// `Identity` of "123" and an allotment of `abc`.
@@ -93,11 +84,23 @@ func main() {
 	// It may seem unreasonable to both have an entry validity time and a queue availability time,
 	// however an entry may have multiple queues it needs to be delivered to, each with different
 	// requirements.
-	p := tc.Publish(e, transit.DeliveredConcern, 100)
+
+	p := tc.Publish(
+		"foo.bar.baz",
+		"123",
+		message,
+		tc.Lot("abc"),
+		tc.NotBefore(notBefore),
+		tc.NotAfter(notAfter),
+		tc.Concern(transit.ProcessedConcern),
+		tc.Timeout(100*time.Millisecond),
+	)
+
 	p.Done(true)
 	if err = p.Err(); err != nil {
 		panic(err)
 	}
+
 	fmt.Printf("Published my entry, got ID %d, concern %d, err %#v\n", p.ID(), p.Concern(), p.Err())
 
 	// The handler will take a single message from the queue, acking it when the handler finishes.

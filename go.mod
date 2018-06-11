@@ -1,24 +1,102 @@
 module github.com/nedscode/transit
 
 require (
+	cloud.google.com/go v0.23.0
+	github.com/Azure/azure-sdk-for-go v0.2.0-beta
+	github.com/Azure/go-autorest v1.1.1
+	github.com/aliyun/aliyun-oss-go-sdk v0.0.0-20171213061034-52de7239022c
 	github.com/armon/go-metrics v0.0.0-20180221182744-783273d70314
 	github.com/boltdb/bolt v1.3.1
+	github.com/cheggaaa/pb v1.0.25
+	github.com/dgrijalva/jwt-go v1.0.2
+	github.com/djherbis/atime v1.0.0
+	github.com/dustin/go-humanize v0.0.0-20180421182945-02af3965c54e
+	github.com/eapache/go-resiliency v1.1.0
+	github.com/eapache/queue v1.1.0
+	github.com/eclipse/paho.mqtt.golang v1.1.1
+	github.com/elazarl/go-bindata-assetfs v1.0.0
+	github.com/garyburd/redigo v1.6.0
+	github.com/go-ini/ini v1.37.0
+	github.com/go-sql-driver/mysql v1.4.0
 	github.com/gogo/gateway v1.0.0
 	github.com/gogo/googleapis v1.0.0
 	github.com/golang/protobuf v1.1.0
+	github.com/golang/snappy v0.0.0-20180518054509-2e65f85255db
+	github.com/googleapis/gax-go v1.0.0
+	github.com/gorilla/context v1.1.1
+	github.com/gorilla/handlers v1.3.0
+	github.com/gorilla/mux v1.6.2
+	github.com/gorilla/rpc v1.1.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.0.0
-	github.com/grpc-ecosystem/grpc-gateway v1.4.0
+	github.com/grpc-ecosystem/grpc-gateway v1.4.1
 	github.com/hashicorp/go-immutable-radix v0.0.0-20180129170900-7f3cd4390caa
 	github.com/hashicorp/go-msgpack v0.0.0-20150518234257-fa3f63826f7c
+	github.com/hashicorp/go-version v0.0.0-20180322230233-23480c066577
 	github.com/hashicorp/golang-lru v0.0.0-20180201235237-0fb14efe8c47
+	github.com/hashicorp/hcl v0.0.0-20180404174102-ef8a98b0bbce
 	github.com/hashicorp/raft v1.0.0
 	github.com/hashicorp/raft-boltdb v0.0.0-20171010151810-6e5ba93211ea
-	github.com/hokaccha/go-prettyjson v0.0.0-20180528130907-d229c224a219
-	github.com/minio/minio v0.0.0-20180521181157-71c4ff9d10cc
+	github.com/imdario/mergo v0.3.4
+	github.com/jackc/pgx v0.0.0-20180517214546-870744921917
+	github.com/joyent/triton-go v0.0.0-20180512003813-728bae006df6
+	github.com/klauspost/cpuid v0.0.0-20180405133222-e7e905edc00e
+	github.com/klauspost/crc32 v0.0.0-20170628072449-bab58d77464a
+	github.com/klauspost/reedsolomon v0.0.0-20180504130200-7d9453e171e9
+	github.com/lib/pq v0.0.0-20180523175426-90697d60dd84
+	github.com/magiconair/properties v1.8.0
+	github.com/matttproud/golang_protobuf_extensions v1.0.1
+	github.com/minio/blazer v0.2.0
+	github.com/minio/cli v1.3.0
+	github.com/minio/go-homedir v0.0.0-20171204175109-4d76aabb80b2
+	github.com/minio/highwayhash v0.0.0-20180501080913-85fc8a2dacad
+	github.com/minio/lsync v0.0.0-20180328070428-f332c3883f63
+	github.com/minio/mc v0.0.0-20180606055905-afcfe758f3d6
+	github.com/minio/minio v0.0.0-20180607011051-6138cae8e718
+	github.com/minio/minio-go v1.0.0
+	github.com/minio/sha256-simd v0.0.0-20171213220625-ad98a36ba0da
+	github.com/minio/sio v0.0.0-20180327104954-6a41828a60f0
+	github.com/mitchellh/go-homedir v0.0.0-20180523094522-3864e76763d9
+	github.com/mitchellh/mapstructure v0.0.0-20180511142126-bb74f1db0675
 	github.com/mwitkow/go-proto-validators v0.0.0-20180403085117-0950a7990007
-	github.com/norganna/formatrus v1.0.0
+	github.com/nats-io/go-nats v1.5.0
+	github.com/nats-io/go-nats-streaming v0.4.0
+	github.com/nats-io/nats v1.5.0
+	github.com/nats-io/nuid v1.0.0
+	github.com/norganna/formatrus v1.0.3
+	github.com/norganna/trit v1.1.3
+	github.com/olekukonko/tablewriter v0.0.0-20180506121414-d4647c9c7a84
+	github.com/pelletier/go-toml v1.2.0
+	github.com/pkg/errors v0.8.0
+	github.com/pkg/profile v1.2.1
+	github.com/pkg/xattr v0.3.0
+	github.com/prometheus/client_golang v0.9.0-pre1
+	github.com/prometheus/common v0.0.0-20180518154759-7600349dcfe1
+	github.com/prometheus/procfs v0.0.0-20180601124529-94663424ae5a
 	github.com/rakyll/statik v0.1.1
-	github.com/sirupsen/logrus v1.0.5
-	golang.org/x/net v0.0.0-20180521201818-8e0cdda24ed4
-	google.golang.org/grpc v1.12.0
+	github.com/rs/cors v1.4.0
+	github.com/rs/xhandler v0.0.0-20170707052532-1eb70cf1520d
+	github.com/rs/zerolog v1.8.0
+	github.com/russross/blackfriday v1.5.1
+	github.com/satori/uuid v1.2.0
+	github.com/segmentio/go-prompt v1.2.0
+	github.com/skyrings/skyring-common v0.0.0-20160929130248-d1c0bb1cbd5e
+	github.com/spf13/afero v1.1.0
+	github.com/spf13/cast v1.2.0
+	github.com/spf13/cobra v0.0.3
+	github.com/spf13/pflag v1.0.1
+	github.com/spf13/viper v1.0.2
+	github.com/streadway/amqp v0.0.0-20180528204448-e5adc2ada8b8
+	github.com/stretchr/objx v0.0.0-20180531200725-0ab728f62c7f
+	github.com/tidwall/gjson v1.1.0
+	github.com/tidwall/match v0.0.0-20171002075945-1731857f09b1
+	go.uber.org/atomic v1.3.2
+	go.uber.org/zap v1.8.0
+	golang.org/x/net v0.0.0-20180530234432-1e491301e022
+	golang.org/x/oauth2 v0.0.0-20180603041954-1e0a3fa8ba9a
+	golang.org/x/text v0.3.0
+	golang.org/x/time v0.0.0-20180412165947-fbb02b2291d2
+	google.golang.org/genproto v0.0.0-20180601223552-81158efcc9f2
+	google.golang.org/grpc v1.12.1
+	gopkg.in/Shopify/sarama.v1 v1.17.0
+	gopkg.in/yaml.v2 v2.2.1
 )

@@ -13,6 +13,10 @@ type Pub struct {
 // Done checks if the Publication of our Entry has completed (according to the server) yet.
 // You can block until it is done by passing wait = true.
 func (p *Pub) Done(wait bool) bool {
+	if p.err != nil {
+		return false
+	}
+
 	if wait {
 		<-p.done
 		return true

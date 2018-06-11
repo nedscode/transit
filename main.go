@@ -19,7 +19,13 @@ func main() {
 	defer cancel()
 
 	logger := logrus.New()
-	logger.Formatter = formatrus.DefaultFormatter
+	formatter := formatrus.New()
+	logger.Formatter = formatter
+	formatter.
+		Order(100, "req").
+		Order(90, "id").
+		Order(-100, "ret", "res")
+	formatter.ParagraphBlock = true
 
 	c := cli.New(ctx, logger)
 	c.AddFlags()

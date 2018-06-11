@@ -60,7 +60,7 @@ sed -i "s/.Id/.ID/g" transit.pb.gw.go
 cp ../static/doc/transit.swagger.json ../static/doc/transit.swagger.json.orig
 patch -f -d ../static/doc <patch.diff
 (cd ../static/doc; diff -u transit.swagger.json.orig transit.swagger.json || true) > patch.diff
-
+sed -i -E "s/^((\\+\\+\\+|---) [^\\t]+).*/\\1/" patch.diff
 cd ../admin
 yarn build
 cp -rf dist ../static/admin

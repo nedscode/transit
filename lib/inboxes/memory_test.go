@@ -2,10 +2,10 @@ package inboxes
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nedscode/transit/proto"
 	"github.com/sirupsen/logrus/hooks/test"
@@ -34,7 +34,9 @@ func getOrder(base []*EntryWrap, from []*EntryWrap) string {
 }
 
 func TestMemoryGrow(t *testing.T) {
-	in := NewMemoryInbox(context.Background(), 10, 100)
+	logger, _ := test.NewNullLogger()
+
+	in := NewMemoryInbox(context.Background(), logger, 10, 100)
 	base := []*EntryWrap{{}, {}, {}, {}, {}, {}, {}, {}, {}, {}}
 
 	copy(in.items, base)
@@ -81,7 +83,9 @@ func TestMemoryGrow(t *testing.T) {
 }
 
 func TestMemoryGrowWrap(t *testing.T) {
-	in := NewMemoryInbox(context.Background(), 10, 100)
+	logger, _ := test.NewNullLogger()
+
+	in := NewMemoryInbox(context.Background(), logger, 10, 100)
 	base := []*EntryWrap{{}, {}, {}, {}, {}, {}, {}, {}, {}, {}}
 
 	copy(in.items, base)
@@ -128,33 +132,24 @@ func TestMemoryGrowWrap(t *testing.T) {
 
 }
 
-type wildSubscriber struct{}
-
-func (*wildSubscriber) CanAccept(entry *EntryWrap) bool {
-	fmt.Printf("checking accept on %#v\n", entry)
-	return true
-}
-
 func TestMemoryInbox(t *testing.T) {
 	topic := "foo.bar.baz"
+	group := "test"
 	identity := "123"
 
 	logger, _ := test.NewNullLogger()
 
-	in := NewMemoryInbox(context.Background(), 100, 1000)
-	ib := New(context.Background(), logger, nil, SyncNone)
-	ib.boxes[topic] = &inboxDetail{
-		Inbox: in,
-		topic: topic,
-		group: "test",
-	}
+	ctx := context.Background()
+	ib := New(ctx, logger, nil, SyncSend)
+	in := ib.Inbox(topic, group, nil)
 
-	ib.Add(Wrap(&transit.Entry{
+	wrap := Wrap(&transit.Entry{
 		Topic:    topic,
 		Identity: identity,
-	}))
+	})
+	ib.Add(wrap)
 
-	entry, _ := in.Next(&wildSubscriber{})
+	entry, _ := in.Next(ctx, AcceptAny)
 
 	if entry == nil {
 		t.Fatal("Expected to have a next item")
@@ -170,5 +165,97 @@ func TestMemoryInbox(t *testing.T) {
 
 	if entry.ID == 0 {
 		t.Errorf("expected entry to have assigned id, got %d", entry.ID)
+	}
+}
+
+func TestMemoryNotBefore(t *testing.T) {
+	topic := "foo.bar.baz"
+	group := "test"
+	identity := "123"
+
+	logger, _ := test.NewNullLogger()
+
+	ctx := context.Background()
+	ib := New(ctx, logger, nil, SyncSend)
+	in := ib.Inbox(topic, group, nil)
+
+	wrap := Wrap(&transit.Entry{
+		Topic:     topic,
+		Identity:  identity,
+		NotBefore: uint64(time.Now().Add(10*time.Millisecond).UnixNano() / int64(time.Millisecond)),
+	})
+	ib.Add(wrap)
+
+	start := time.Now()
+	in.Next(ctx, AcceptAny)
+	delta := time.Now().Sub(start)
+	if delta < 9*time.Millisecond {
+		t.Fatal("Did not wait long enough", delta)
+	}
+}
+
+func TestMemoryNotAfter(t *testing.T) {
+	topic := "foo.bar.baz"
+	group := "test"
+	identity := "123"
+
+	logger, _ := test.NewNullLogger()
+
+	ctx := context.Background()
+	ib := New(ctx, logger, nil, SyncSend)
+	in := ib.Inbox(topic, group, nil)
+
+	wrap := Wrap(&transit.Entry{
+		Topic:    topic,
+		Identity: identity,
+		NotAfter: uint64(time.Now().Add(10*time.Millisecond).UnixNano() / int64(time.Millisecond)),
+	})
+	ib.Add(wrap)
+
+	time.Sleep(10 * time.Millisecond)
+	waitCtx, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
+	defer cancel()
+
+	e, _ := in.Next(waitCtx, AcceptAny)
+	if e != nil {
+		t.Fatal("Entry should have been expired")
+	}
+}
+
+func TestMemoryConcern(t *testing.T) {
+	topic := "foo.bar.baz"
+	group := "test"
+	identity := "123"
+
+	logger, _ := test.NewNullLogger()
+
+	ctx := context.Background()
+	ib := New(ctx, logger, nil, SyncSend)
+	in := ib.Inbox(topic, group, nil)
+
+	wrap := Wrap(&transit.Entry{
+		Topic:    topic,
+		Identity: identity,
+	})
+	ib.Add(wrap)
+
+	if wrap.Concern > transit.Concern_Confirmed {
+		t.Fatal("Should not be concern > confirmed")
+	}
+
+	e, _ := in.Next(ctx, AcceptAny)
+
+	ib.Ack(&transit.Acknowledgement{
+		Sub: &transit.Sub{
+			Prefix: topic,
+			Group:  group,
+			ID:     e.ID,
+		},
+		Ack:   true,
+		Close: true,
+	})
+
+	if wrap.Concern < transit.Concern_Processed {
+		t.Fatal("Should have concern >= processed")
 	}
 }
