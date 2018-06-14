@@ -4,6 +4,8 @@ import (
 	"errors"
 	"sync"
 	"time"
+
+	"github.com/norganna/style"
 )
 
 // SubHandlerError is a wrapped error that contains additional information about the severity of the error and the
@@ -167,7 +169,7 @@ func (c *Client) Subscribe(prefix, group string, opts ...SubOption) (*SubStream,
 				err = sub.handler(s.Entry)
 				ack := true
 				close := false
-				if e, ok := err.(*SubHandlerError); ok {
+				if e, ok := err.(SubHandlerError); ok {
 					ack = e.processed
 					close = e.closing
 				}
@@ -189,6 +191,24 @@ func (c *Client) Subscribe(prefix, group string, opts ...SubOption) (*SubStream,
 	return sub, nil
 }
 
+func (s *SubStream) callHandler(entry *Entry) (err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			err = HandlerError(style.Errorf("subscription handler panicked: %#v", p), false, false)
+		}
+	}()
+
+	e := s.handler(entry)
+	if se, ok := e.(SubHandlerError); ok {
+		err = se
+	} else {
+		// The assumption is made that if you didn't return a proper SubHandlerError, that the item was processed.
+		// Is this right? Probably not... make sure you wrap your errors so we can tell.
+		err = HandlerError(err, true, false)
+	}
+	return
+}
+
 // Handle is called on a subscription stream to allow new entries to be processed by the subscriber.
 // Any `Entry` sent to handler will be assumed to be completely processed.
 // When a handler returns, the `Entry` is automatically acked regardless of error and a new `Entry` retrieved.
@@ -208,7 +228,7 @@ func (s *SubStream) Handle(handler SubHandler) error {
 
 	s.handlerErr = make(chan error, 1)
 	s.handler = handler
-	s.sem <- true
+	s.sem <- true // triggering this allows the goroutine in Subscribe above to fetch another item.
 
 	defer func() {
 		close(s.handlerErr)

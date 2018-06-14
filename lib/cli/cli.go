@@ -153,6 +153,9 @@ func (c *Config) Exec(command string, args []string) (err error) {
 	case "start-server":
 		exec = c.startServerCommand
 
+	case "list-queues":
+		exec = c.listQueuesCommand
+
 	default:
 		exec = c.helpCommand
 	}

@@ -11,3 +11,15 @@ const (
 	// Acked indicates that the item has been processed and can be removed.
 	Acked
 )
+
+func (s State) String() string {
+	switch s {
+	case Ready:
+		return "Ready"
+	case Sent:
+		return "Sent"
+	case Acked:
+		return "Acked"
+	}
+	return "Novel"
+}

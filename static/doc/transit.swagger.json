@@ -261,6 +261,53 @@
       },
       "description": "Acked is the result of an Acking of a Sub."
     },
+    "Box": {
+      "type": "object",
+      "properties": {
+        "prefix": {
+          "type": "string"
+        },
+        "group": {
+          "type": "string"
+        },
+        "states": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "distribution": {
+          "$ref": "#/definitions/DistributionStrategy"
+        },
+        "delivery": {
+          "$ref": "#/definitions/DeliveryStrategy"
+        }
+      }
+    },
+    "BoxItem": {
+      "type": "object",
+      "properties": {
+        "entry": {
+          "$ref": "#/definitions/Entry"
+        },
+        "inserted": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "concern": {
+          "$ref": "#/definitions/Concern"
+        },
+        "notified": {
+          "type": "boolean",
+          "format": "boolean"
+        },
+        "expired": {
+          "type": "boolean",
+          "format": "boolean"
+        }
+      }
+    },
     "Command": {
       "type": "object",
       "properties": {
@@ -429,6 +476,23 @@
       },
       "description": "Publication is returned from a call to Publish."
     },
+    "Snapshot": {
+      "type": "object",
+      "properties": {
+        "boxes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Box"
+          }
+        },
+        "items": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/BoxItem"
+          }
+        }
+      }
+    },
     "String": {
       "type": "object",
       "properties": {
@@ -467,6 +531,50 @@
       },
       "description": "Sub is provided to a subscriber in the notification and defines which entry in which inbox should be marked as\ndelivered when the Sub is Acked."
     },
+    "Subscription": {
+      "type": "object",
+      "properties": {
+        "prefix": {
+          "type": "string",
+          "description": "Prefix is the topic prefix you wish to subscribe to.\nPrefix must match a complete segment prefix to allow you to receive the messages."
+        },
+        "group": {
+          "type": "string",
+          "description": "Group is your group name all subscribers with the same group name will share the processing of the messages."
+        },
+        "allotments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Allotments contains a list of strings to match against `Entry.Lot`.\nIf the entry matches one of your Allotments, you will receive the message.\nEntries are shared amongst all subscribers that specify the matching Lot."
+        },
+        "delay": {
+          "type": "string",
+          "format": "uint64",
+          "description": "Delay specifies a minimum number of milliseconds before an entry becomes deliverable to you."
+        },
+        "max_age": {
+          "type": "string",
+          "format": "uint64",
+          "description": "MaxAge specifies a maximum number of milliseconds after which you're not interested in a message any more."
+        },
+        "no_data": {
+          "type": "boolean",
+          "format": "boolean",
+          "description": "NoData indicates that you're not interested in the content of the message, and not to send it.\nSpecify this option to save bandwidth if you only care about knowing a topic happend not what it's about."
+        },
+        "distribution": {
+          "$ref": "#/definitions/DistributionStrategy",
+          "description": "Distribution specifies what additional messages you want to receive other than your Allotted messages."
+        },
+        "delivery": {
+          "$ref": "#/definitions/DeliveryStrategy",
+          "description": "Delivery specifies how you want duplicate entries in the queue to be dealt with (queue-wide option)."
+        }
+      },
+      "description": "Subscription indicates what a process wishes to subscribe to and how it wants the queue configured."
+    },
     "Success": {
       "type": "object",
       "properties": {
@@ -476,6 +584,17 @@
         },
         "error": {
           "type": "string"
+        }
+      }
+    },
+    "Update": {
+      "type": "object",
+      "properties": {
+        "entry": {
+          "$ref": "#/definitions/Entry"
+        },
+        "inbox": {
+          "$ref": "#/definitions/Subscription"
         }
       }
     },

@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"google.golang.org/grpc"
+	"github.com/norganna/style"
 
 	"github.com/nedscode/transit/proto"
 )
@@ -17,9 +18,9 @@ func (c *Config) getToken(pk string) (tokenMaster, tokenRole, tokenName string) 
 	ctx, cancel := c.timeout()
 	defer cancel()
 
-	masterKey := fmt.Sprintf("tokens/%s/master", pk)
-	roleKey := fmt.Sprintf("tokens/%s/role", pk)
-	nameKey := fmt.Sprintf("tokens/%s/name", pk)
+	masterKey := style.Sprintf("tokens/%s/master", pk)
+	roleKey := style.Sprintf("tokens/%s/role", pk)
+	nameKey := style.Sprintf("tokens/%s/name", pk)
 
 	_, key := c.getPeersKey()
 	res, err := c.node.ClusterGetKeys(
@@ -52,7 +53,7 @@ func (c *Config) genAuth(pk string, instance int32) afterFunc {
 
 			c.logger.Infof("Auth token for %s master token %s [%q]:", tokenRole, tokenMaster, tokenName)
 			c.logger.Infof("  {public}-{hextime}-{nonce}-md5({private}-{hextime}-{nonce}) =")
-			fmt.Println(auth)
+			style.Printlnf("‹bold:%s›", auth)
 			return nil
 		}
 
@@ -62,7 +63,7 @@ func (c *Config) genAuth(pk string, instance int32) afterFunc {
 
 func (c *Config) genAuthCommand(args []string) (cb afterFunc, err error) {
 	if len(args) < 1 {
-		fmt.Println(`Usage: gen-auth {PUBLIC KEY} [{INSTANCE}]`)
+		style.Println(`‹hc:Usage:› gen-auth ‹b:{PUBLIC KEY}› ‹i:[{INSTANCE}]›`)
 		return
 	}
 
@@ -70,12 +71,12 @@ func (c *Config) genAuthCommand(args []string) (cb afterFunc, err error) {
 	if len(args) > 1 {
 		v, pErr := strconv.ParseInt(args[1], 10, 64)
 		if pErr != nil {
-			err = fmt.Errorf("unable to convert instance id into number")
+			err = style.Errorf("unable to convert instance id into number")
 			return
 		}
 		instance = int32(v)
 		if instance < 0 {
-			err = fmt.Errorf("instance must be within the range: 0 ≤ instance ≤ 2147483647")
+			err = style.Errorf("instance must be within the range: 0 ≤ instance ≤ 2147483647")
 			return
 		}
 	}

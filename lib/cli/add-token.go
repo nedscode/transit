@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"google.golang.org/grpc"
+	"github.com/norganna/style"
 
 	"github.com/nedscode/transit/lib/server"
 	"github.com/nedscode/transit/proto"
@@ -16,14 +17,14 @@ func init() {
 
 func (c *Config) addTokenCommand(args []string) (cb afterFunc, err error) {
 	if len(args) < 2 {
-		fmt.Println(`Usage: add-token {ROLE} {NAME}`)
+		style.Println(`Usage: add-token {ROLE} {NAME}`)
 		return
 	}
 
 	role := args[0]
 	if !server.AssignableRoles[role] {
 		validRoles := strings.Join(server.AssignableRolesList, ", ")
-		fmt.Printf("Invalid role (%q), must be one of: %s\n", role, validRoles)
+		style.Printf("‹ec:Invalid role› %q must be one of: %s\n", role, validRoles)
 		return
 	}
 
@@ -41,7 +42,7 @@ func (c *Config) addToken(role, name string) (cb afterFunc) {
 		exist, _, _ := c.getToken(pk)
 
 		if exist != "" {
-			return fmt.Errorf("new token master public key already exists: %s", pk)
+			return style.Errorf("new token master public key already exists: %s", pk)
 		}
 
 		ctx, cancel := c.timeout()

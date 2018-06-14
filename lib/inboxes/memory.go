@@ -2,7 +2,6 @@ package inboxes
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -106,6 +105,7 @@ func (i *MemoryInbox) Add(entry *EntryWrap) bool {
 
 	i.items[t] = entry
 	i.states[t] = Ready
+	i.changes[t] = make(chan bool, 0)
 	i.alive++
 	entry.CountInboxes++
 
@@ -113,7 +113,9 @@ func (i *MemoryInbox) Add(entry *EntryWrap) bool {
 
 	select {
 	case i.avail <- nil:
+		i.logger.Info("Notifying availability of new entry")
 	default:
+		i.logger.Info("Failed notifying availability (channel full?) ", i.avail, len(i.avail), cap(i.avail))
 	}
 
 	return true
@@ -128,6 +130,10 @@ func (i *MemoryInbox) Next(ctx context.Context, sub Subscriber) (*EntryWrap, <-c
 
 			var minTime time.Time
 			next, possible := i.iterate(func(t *Strategy, e *EntryWrap, s State) (can tril) {
+				if s != Ready {
+					return no
+				}
+
 				var entryTime time.Time
 
 				can = yes
@@ -173,10 +179,6 @@ func (i *MemoryInbox) Next(ctx context.Context, sub Subscriber) (*EntryWrap, <-c
 				i.setTime <- minTime
 			}
 
-			if next != nil {
-				*next.state = Sent
-			}
-
 			if len(possible) > 0 {
 				if i.strategy.Distribution != transit.DistributionStrategy_Requested {
 					next = possible[0]
@@ -187,6 +189,7 @@ func (i *MemoryInbox) Next(ctx context.Context, sub Subscriber) (*EntryWrap, <-c
 			}
 
 			if next != nil {
+				*next.state = Sent
 				return next.wrap, next.change
 			}
 			return nil, nil
@@ -235,7 +238,8 @@ func (i *MemoryInbox) Ack(a *transit.Acknowledgement) *EntryWrap {
 	})
 
 	// Only a Sent item may be ACKed.
-	if found.state != nil && *found.state == Sent {
+	if found != nil && found.state != nil && *found.state == Sent {
+		notify := false
 		if a.Ack {
 			// Mark it as ACKed.
 			*found.state = Acked
@@ -244,18 +248,20 @@ func (i *MemoryInbox) Ack(a *transit.Acknowledgement) *EntryWrap {
 			if adjacent {
 				advance++
 			}
-
-			// Notify that our state has changed, if anyone is listening
-			select {
-			case found.change <- !a.Close:
-			default:
-			}
+			notify = true
 		} else {
 			// Needs to be marked as ready so it can be redelivered to another subscriber.
 			*found.state = Ready
 			i.avail <- nil
+			notify = true
+		}
 
+		if notify {
 			// Notify that our state has changed, if anyone is listening
+			select {
+			case <-found.change:
+			default:
+			}
 			select {
 			case found.change <- !a.Close:
 			default:
@@ -267,11 +273,24 @@ func (i *MemoryInbox) Ack(a *transit.Acknowledgement) *EntryWrap {
 		i.head = (i.head + advance) % i.capacity
 	}
 
-	if found.state == nil {
+	if found == nil || found.state == nil {
 		return nil
 	}
 	return found.wrap
 }
+
+// All returns all the entries in this inbox.
+func (i *MemoryInbox) All() (all []InboxItem) {
+	i.iterate(func(_ *Strategy, e *EntryWrap, s State) tril {
+		all = append(all, InboxItem{
+			EntryWrap: e,
+			State: s,
+		})
+		return no
+	})
+	return
+}
+
 
 // Strategy updates (optionally) the current strategy and returns the new strategy and whether it was updated.
 func (i *MemoryInbox) Strategy(set *Strategy) (Strategy, bool) {
@@ -390,9 +409,9 @@ func (i *MemoryInbox) compact() bool {
 
 		if pos >= n {
 			// This should never happen... if it does, someone's messed up.
-			fmt.Printf("Items: %#v\n", i.items)
-			fmt.Printf("Alive: %d\n", i.alive)
-			fmt.Printf("Pos:   %d\n", pos)
+			i.logger.Warn("Items: %#v\n", i.items)
+			i.logger.Warn("Alive: %d\n", i.alive)
+			i.logger.Warn("Pos:   %d\n", pos)
 			panic("alive count is inconsistent while compacting inbox")
 		}
 

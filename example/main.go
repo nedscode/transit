@@ -132,6 +132,10 @@ func main() {
 				}).Infof("My Bar arrived")
 			}
 		}
+
+		logger.Info("Sleeping for 5...")
+		time.Sleep(5*time.Second)
+
 		return transit.ErrShuttingDown
 	})
 	if err != nil && err != transit.ErrShuttingDown {

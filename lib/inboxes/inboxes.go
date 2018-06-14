@@ -63,11 +63,17 @@ type InboxStats struct {
 // InboxFactory is a function that can return a new Inbox if required.
 type InboxFactory func(ctx context.Context) Inbox
 
+type InboxItem struct {
+	*EntryWrap
+	State
+}
+
 // Inbox is a place to accumulate message entries for a group.
 type Inbox interface {
 	Add(*EntryWrap) bool
 	Next(context.Context, Subscriber) (*EntryWrap, <-chan bool)
 	Ack(*transit.Acknowledgement) *EntryWrap
+	All() ([]InboxItem)
 
 	Strategy(*Strategy) (updated Strategy, changed bool)
 }
@@ -75,13 +81,13 @@ type Inbox interface {
 type inboxDetail struct {
 	Inbox
 
-	topic string
-	group string
+	Prefix string
+	Group  string
 
-	created time.Time
+	Created time.Time
 
-	subscribers int
-	disconnect  time.Time
+	Subscribers  int
+	Disconnected time.Time
 }
 
 var _ Inbox = (*inboxDetail)(nil)
@@ -132,7 +138,7 @@ func (i *Inboxes) Add(wrap *EntryWrap) {
 
 	added := false
 	for _, box := range i.boxes {
-		if topicMatch(fullTopic, box.topic) {
+		if topicMatch(fullTopic, box.Prefix) {
 			box.Add(wrap)
 			added = true
 		}
@@ -174,12 +180,23 @@ func (i *Inboxes) Ack(ack *transit.Acknowledgement) *EntryWrap {
 	}
 
 	wrap := box.Ack(ack)
-	if !wrap.Notified && wrap.CountAcked >= wrap.CountInboxes {
+	if wrap == nil {
+		i.logger.WithField("ack", ack).Warn("Failed to find entry to ack")
+	} else if !wrap.Notified && wrap.CountAcked >= wrap.CountInboxes {
 		i.notifyDelivery(wrap)
 	}
 
 	return wrap
 }
+
+// All returns all currently active boxes.
+func (i *Inboxes) All() (d []*inboxDetail) {
+	for _, box := range i.boxes {
+		d = append(d, box)
+	}
+	return
+}
+
 
 // Cheap method to get a preexisting inbox using only a read lock.
 func (i *Inboxes) getInbox(prefix, group string) (inbox *inboxDetail) {
@@ -210,11 +227,11 @@ func (i *Inboxes) createInbox(prefix, group string, factory InboxFactory) (inbox
 		inbox = &inboxDetail{
 			Inbox: factory(i.ctx),
 
-			topic: prefix,
-			group: group,
+			Prefix: prefix,
+			Group:  group,
 
-			created:    now,
-			disconnect: now,
+			Created:      now,
+			Disconnected: now,
 		}
 
 		i.boxes[key] = inbox

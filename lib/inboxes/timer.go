@@ -8,9 +8,10 @@ import (
 func updateableTimer(ctx context.Context, avail chan<- *struct{}) chan<- time.Time {
 	set := make(chan time.Time)
 
+	zero := time.Time{}
 	go func() {
-		var t time.Time
 		var c <-chan time.Time
+		t := zero
 		n := 0
 
 		tock := time.NewTicker(5 * time.Second)
@@ -29,13 +30,20 @@ func updateableTimer(ctx context.Context, avail chan<- *struct{}) chan<- time.Ti
 				}
 
 			case <-c:
-				avail <- nil
+				select {
+				case avail <- nil:
+				default:
+				}
+				t = zero
 				n = 0
 
 			case <-tock.C:
 				n++
 				if n >= 10 {
-					avail <- nil
+					select {
+					case avail <- nil:
+					default:
+					}
 					n = 0
 				}
 			}

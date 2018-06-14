@@ -1,12 +1,13 @@
 package cli
 
 import (
-	"fmt"
 	"strings"
 
 	"google.golang.org/grpc"
+	"github.com/norganna/style"
 
 	"github.com/nedscode/transit/proto"
+	"path"
 )
 
 func init() {
@@ -14,10 +15,8 @@ func init() {
 }
 
 func (c *Config) listTokens() error {
-	fmt.Println("Tokens:")
-	fmt.Println("")
-	fmt.Printf("%-12s  %-10s  %s\n", "Public Key", "Role", "Name")
-	fmt.Printf("%-12s  %-10s  %s\n", "------------", "----------", "----------------")
+	style.Println("‹hc:Tokens:›\n")
+	style.Printlnf("  ‹dh:12:|%s›  ‹dh:10:|%s›  ‹dh:30:|%s›", "Public Key", "Role", "Name")
 
 	pkk := map[string]bool{}
 	ctx, cancel := c.timeout()
@@ -42,9 +41,9 @@ func (c *Config) listTokens() error {
 	}
 
 	for pk := range pkk {
-		tokenRole := tokenCfg[fmt.Sprintf("tokens/%s/role", pk)]
-		tokenName := tokenCfg[fmt.Sprintf("tokens/%s/name", pk)]
-		fmt.Printf("  %-12s  %-10s  %s\n", pk, tokenRole, tokenName)
+		tokenRole := tokenCfg[path.Join("tokens", pk, "role")]
+		tokenName := tokenCfg[path.Join("tokens", pk, "name")]
+		style.Printf("  ‹b:%-12s›  %-10s  %s\n", pk, tokenRole, tokenName)
 	}
 	return nil
 }

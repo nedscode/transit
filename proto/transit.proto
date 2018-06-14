@@ -68,6 +68,13 @@ service Transit {
 
     // ClusterLeader returns the gRPC address of the current cluster leader.
     rpc ClusterLeader(Void) returns (String) {}
+
+    // Dump is for fetching an entire snapshot of entries and queues from the leader server.
+    rpc Dump(Void) returns (Snapshot) {}
+
+    // Updates is for keeping track of updates from the leader server.
+    rpc Updates(stream Success) returns (stream Update) {}
+
 }
 
 enum DistributionStrategy {
@@ -184,7 +191,9 @@ message Entry {
     string identity = 7;
 
     // Message contains the item that you want to send to subscribers detailing the entry.
-    google.protobuf.Any message = 10;
+    google.protobuf.Any message = 10 [
+        (gogoproto.moretags) = "depict:\"-\""
+    ];
 
     // NotBefore indicates that the message will only be deliverable on or after the given milliseconds since epoch.
     uint64 not_before = 20;
@@ -281,6 +290,32 @@ message Server {
         (gogoproto.customname) = "ID"
     ];
     string address = 2;
+}
+
+message BoxItem {
+    Entry entry = 1;
+    uint64 inserted = 2;
+    Concern concern = 3;
+    bool notified = 4;
+    bool expired = 5;
+}
+
+message Snapshot {
+    repeated Box boxes = 1;
+    map<uint64, BoxItem> items = 2;
+}
+
+message Box {
+    string prefix = 1;
+    string group = 2;
+    map<uint64, uint32> states = 10;
+    DistributionStrategy distribution = 80;
+    DeliveryStrategy delivery = 81;
+}
+
+message Update {
+    Entry entry = 1;
+    Subscription inbox = 2;
 }
 
 message Success {

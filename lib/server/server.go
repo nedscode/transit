@@ -67,7 +67,6 @@ func (b *Backend) Ping(ctx context.Context, ping *transit.Pong) (*transit.Pong, 
 	logger = logger.WithField("user", tokenName)
 	logger = logger.WithField("req", ping)
 
-	logger.WithField("res", res).Debug("Sending pong")
 	return res, nil
 }
 
@@ -131,7 +130,7 @@ func (b *Backend) Publish(ctx context.Context, p *transit.Publication) (*transit
 		ID:      wrap.ID,
 		Concern: wrap.Concern,
 	}
-	logger.WithField("res", res).Debug("Published entry")
+
 	return res, nil
 }
 
@@ -157,8 +156,6 @@ func (b *Backend) Subscribe(d *transit.Subscription, s transit.Transit_Subscribe
 		return err
 	}
 	logger = logger.WithField("user", tokenName)
-
-	logger.Debug("New subscriber")
 
 	subscriber := newSubscriber(d.Allotments)
 	subscriber.delay = d.Delay
@@ -210,9 +207,10 @@ func (b *Backend) Subscribe(d *transit.Subscription, s transit.Transit_Subscribe
 				})
 				drain(changed)
 			}
-
 			running = false
+
 		case running = <-changed:
+			sub = nil
 		}
 	}
 
@@ -236,11 +234,11 @@ func (b *Backend) Ack(ctx context.Context, p *transit.Acknowledgement) (*transit
 
 	logger = logger.WithField("req", p)
 
+	wrap := b.inbox.Ack(p)
 	res := &transit.Acked{
-		Success: true,
+		Success: wrap != nil,
 	}
 
-	logger.WithField("res", res).Debug("Acking entry")
 	return res, nil
 }
 
@@ -369,4 +367,57 @@ func (b *Backend) ClusterLeader(ctx context.Context, v *transit.Void) (*transit.
 
 	logger.WithField("res", res).Debug("Returning leader")
 	return res, nil
+}
+
+// Dump is for fetching an entire snapshot of entries and queues from the leader server.
+func (b *Backend) Dump(ctx context.Context, v *transit.Void) (*transit.Snapshot, error) {
+	logger := b.logger.WithField("rpc", "cluster-leader")
+
+	err := b.requireCluster(ctx)
+	if err != nil {
+		logger.WithError(err).Info("Not permitted")
+		return nil, err
+	}
+
+	if !b.store.Leading() {
+		logger.Info("Requires leader")
+		return nil, notLeaderError
+	}
+
+	boxItems := map[uint64]*transit.BoxItem{}
+	res := &transit.Snapshot{
+		Items: boxItems,
+	}
+
+	for _, box := range b.inbox.All() {
+		strategy, _ := box.Strategy(nil)
+		in := &transit.Box{
+			Prefix: box.Prefix,
+			Group: box.Group,
+			Distribution: strategy.Distribution,
+			Delivery: strategy.Delivery,
+			States: map[uint64]uint32{},
+		}
+		for _, entry := range box.All() {
+			id := entry.ID
+			if _, ok := boxItems[id]; !ok {
+				boxItems[id] = &transit.BoxItem{
+					Entry:    entry.Entry,
+					Inserted: uint64(entry.Inserted.UnixNano() / int64(time.Millisecond)),
+					Concern:  entry.Concern,
+					Notified: entry.Notified,
+					Expired:  entry.Expired,
+				}
+			}
+			in.States[id] = uint32(entry.State)
+		}
+		res.Boxes = append(res.Boxes, in)
+	}
+
+	return res, nil
+}
+
+// Updates is for keeping track of updates from the leader server.
+func (b *Backend) Updates(u transit.Transit_UpdatesServer) error {
+	return nil
 }

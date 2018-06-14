@@ -190,15 +190,11 @@ func tokensFromContext(ctx context.Context) (t []string) {
 }
 
 func (b *Backend) requireCluster(ctx context.Context) error {
-	md, _ := metadata.FromIncomingContext(ctx)
-	b.logger.WithField("md", md).Info("Metadata")
-
 	tokens := tokensFromContext(ctx)
 	if len(tokens) == 0 {
 		return unauthenticatedError
 	}
 	clusterKey := b.store.Key()
-	b.logger.WithField("cluster-key", clusterKey).WithField("tokens", tokens).Info("Got tokens")
 
 	for _, k := range tokens {
 		if len(k) == 48 && k == clusterKey {

@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -13,6 +12,7 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware/validator"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"google.golang.org/grpc"
+	"github.com/norganna/style"
 
 	"github.com/nedscode/transit/lib/connect"
 	"github.com/nedscode/transit/lib/inboxes"
@@ -36,15 +36,15 @@ func (c *Config) startServer() error {
 	}
 
 	// Our clusterID will be our "peer accessible" IP and gRPC (not raft) port.
-	c.clusterID = fmt.Sprintf("%s:%d", c.Address, c.GRPCPort)
+	c.clusterID = style.Sprintf("%s:%d", c.Address, c.GRPCPort)
 	bootstrap := c.ClusterURI == ""
-	c.raft = raft.New(c.clusterID, fmt.Sprintf(":%d", c.ClusterPort), c.DataDir, bootstrap, c.logger)
+	c.raft = raft.New(c.clusterID, style.Sprintf(":%d", c.ClusterPort), c.DataDir, bootstrap, c.logger)
 	c.raft.SeedKey = c.ClusterSeed
 	c.logger.Info("Serving raft protocol on ", c.ClusterPort)
 	c.raft.Start(c.ctx, c.Persist)
 
 	// Listen on all interfaces at the gRPC port.
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", c.GRPCPort))
+	listener, err := net.Listen("tcp", style.Sprintf(":%d", c.GRPCPort))
 	if err != nil {
 		c.logger.WithError(err).Fatal("Failed to listen")
 	}
@@ -85,7 +85,7 @@ func (c *Config) startServer() error {
 				ctx,
 				&transit.Server{
 					ID:      c.clusterID,
-					Address: fmt.Sprintf("%s:%d", c.Address, c.ClusterPort),
+					Address: style.Sprintf("%s:%d", c.Address, c.ClusterPort),
 				},
 				grpc.PerRPCCredentials(&transit.TokenCredentials{
 					Token: key,
@@ -128,7 +128,7 @@ func (c *Config) startServer() error {
 		c.logger.WithError(rpcServer.Serve(listener)).Fatal("Listener failed")
 	}()
 
-	conn, _, _, _, err := c.dialNode(fmt.Sprintf("%s:%d", c.Address, c.GRPCPort), c.raft.Key())
+	conn, _, _, _, err := c.dialNode(style.Sprintf("%s:%d", c.Address, c.GRPCPort), c.raft.Key())
 	if err != nil {
 		c.logger.WithError(err).Fatal("Failed to start local client")
 	}
@@ -151,16 +151,16 @@ func (c *Config) startServer() error {
 	}
 
 	// Save the current cluster connection string
-	c.ClusterURI = fmt.Sprintf("transit://%s/%s", strings.Join(c.raft.PeerAddresses(), ","), key)
+	c.ClusterURI = style.Sprintf("transit://%s/%s", strings.Join(c.raft.PeerAddresses(), ","), key)
 	c.logger.Infof("Boot additional servers with `-cluster %s`", c.ClusterURI)
 	ioutil.WriteFile(path.Join(c.DataDir, "cluster"), []byte(c.ClusterURI), 0600)
 
-	gatewayAddr := fmt.Sprintf("%s:%d", c.Address, c.GatewayPort)
+	gatewayAddr := style.Sprintf("%s:%d", c.Address, c.GatewayPort)
 	c.logger.Infof("Serving gRPC gateway on %s://%s", proto, gatewayAddr)
 	c.logger.Infof("Serving admin management on %s://%s%s", proto, gatewayAddr, "/admin/")
 	c.logger.Infof("Serving API documentation on %s://%s%s", proto, gatewayAddr, "/doc/")
 
-	gatewayAddr = fmt.Sprintf(":%d", c.GatewayPort)
+	gatewayAddr = style.Sprintf(":%d", c.GatewayPort)
 	gwServer := http.Server{
 		Addr:      gatewayAddr,
 		TLSConfig: c.certs.ServerConfig(c.TLSMode == "anon"),
@@ -174,7 +174,7 @@ func (c *Config) startServer() error {
 	certFile := path.Join(c.DataDir, "cert.pem")
 	keyFile := path.Join(c.DataDir, "key.pem")
 
-	fmt.Println("Server is running")
+	style.Println("‹hc:Server is running›")
 	c.logger.WithError(gwServer.ListenAndServeTLS(certFile, keyFile)).Fatal("Gateway server failed")
 
 	return nil
@@ -189,7 +189,7 @@ func (c *Config) joinCluster(client transit.TransitClient, key string) error {
 		ctx,
 		&transit.Server{
 			ID:      c.clusterID,
-			Address: fmt.Sprintf("%s:%d", c.Address, c.ClusterPort),
+			Address: style.Sprintf("%s:%d", c.Address, c.ClusterPort),
 		},
 		grpc.PerRPCCredentials(&transit.TokenCredentials{
 			Token: key,
@@ -197,7 +197,7 @@ func (c *Config) joinCluster(client transit.TransitClient, key string) error {
 	)
 
 	if err == nil && !join.Succeed {
-		err = fmt.Errorf("failed to join cluster: %s", join.Error)
+		err = style.Errorf("failed to join cluster: %s", join.Error)
 	}
 
 	return err
@@ -216,7 +216,7 @@ func (c *Config) getLeader(client transit.TransitClient, key string) (string, er
 	)
 
 	if err == nil && leader.Value == "" {
-		err = fmt.Errorf("failed to get leader, empty")
+		err = style.Errorf("failed to get leader, empty")
 	}
 
 	return leader.Value, err

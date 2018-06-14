@@ -1,12 +1,13 @@
 package cli
 
 import (
-	"fmt"
+	"github.com/norganna/style"
 )
 
 const (
 	tokensGroup = iota
 	serverGroup
+	queuesGroup
 	helpGroup
 	groupCount
 )
@@ -23,16 +24,15 @@ func init() {
 
 func (c *Config) helpCommand(_ []string) (afterFunc, error) {
 	return func() error {
-		fmt.Println("Available commands:")
-		fmt.Println("")
-		fmt.Printf("%-16s  %s\n", "Command", "Description")
-		fmt.Printf("%-16s  %s\n", "----------------", "------------------------------")
+		style.Println("‹bc:Available commands:›\n")
+		style.Printlnf("  ‹dh:16:|%s›  ‹dh:30:|%s›", "Command", "Description")
+
 		for _, g := range commandHelp {
 			if len(g) > 0 {
 				for _, c := range g {
-					fmt.Printf("%-16s  %s\n", c[0], c[1])
+					style.Printf("  ‹bc:%-16s›  %s\n", c[0], c[1])
 				}
-				fmt.Printf("%-16s  %s\n", "----------------", "------------------------------")
+				style.Printf("  ‹hl:16›  ‹hl:30›\n")
 			}
 		}
 		return nil

@@ -2,10 +2,10 @@ package cli
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 
 	"google.golang.org/grpc"
+	"github.com/norganna/style"
 
 	"github.com/nedscode/transit/lib/connect"
 	"github.com/nedscode/transit/proto"
@@ -13,7 +13,7 @@ import (
 
 func (c *Config) withLocal(key string, cb afterFunc) afterFunc {
 	return func() (err error) {
-		_, c.node, _, _, err = c.dialNode(fmt.Sprintf(":%d", c.GRPCPort), key)
+		_, c.node, _, _, err = c.dialNode(style.Sprintf(":%d", c.GRPCPort), key)
 		if err != nil {
 			return
 		}

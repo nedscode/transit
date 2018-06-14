@@ -87,7 +87,7 @@
        }
      }
    },
-@@ -304,7 +321,7 @@
+@@ -351,7 +368,7 @@
        "type": "object",
        "properties": {
          "id": {
@@ -96,7 +96,7 @@
            "format": "uint64",
            "description": "ID is the global ID that is assigned to the entry.\nThis will be assigned by the server and any value you specify will be ignored."
          },
-@@ -325,12 +342,12 @@
+@@ -372,12 +389,12 @@
            "description": "Message contains the item that you want to send to subscribers detailing the entry."
          },
          "not_before": {
@@ -111,7 +111,7 @@
            "format": "uint64",
            "description": "NotAfter indicates that the message will be removed from all queues after the given milliseconds since epoch."
          },
-@@ -362,7 +379,7 @@
+@@ -409,7 +426,7 @@
        "type": "object",
        "properties": {
          "id": {
@@ -120,7 +120,7 @@
            "format": "uint64",
            "description": "ID is an incrementing ID indicating the most recently allocated Entry ID."
          },
-@@ -401,7 +418,7 @@
+@@ -448,7 +465,7 @@
        "type": "object",
        "properties": {
          "id": {
@@ -129,7 +129,7 @@
            "format": "uint64",
            "description": "ID is the internally assigned ID for your submitted Entry."
          },
-@@ -443,7 +460,7 @@
+@@ -507,7 +524,7 @@
            "description": "Group is the group that the message was delivered to."
          },
          "id": {

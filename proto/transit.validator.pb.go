@@ -20,6 +20,10 @@ It has these top-level messages:
 	ApplyCommands
 	Command
 	Server
+	BoxItem
+	Snapshot
+	Box
+	Update
 	Success
 	String
 	Strings
@@ -118,6 +122,42 @@ func (this *Command) Validate() error {
 	return nil
 }
 func (this *Server) Validate() error {
+	return nil
+}
+func (this *BoxItem) Validate() error {
+	if this.Entry != nil {
+		if err := go_proto_validators.CallValidatorIfExists(this.Entry); err != nil {
+			return go_proto_validators.FieldError("Entry", err)
+		}
+	}
+	return nil
+}
+func (this *Snapshot) Validate() error {
+	for _, item := range this.Boxes {
+		if item != nil {
+			if err := go_proto_validators.CallValidatorIfExists(item); err != nil {
+				return go_proto_validators.FieldError("Boxes", err)
+			}
+		}
+	}
+	// Validation of proto3 map<> fields is unsupported.
+	return nil
+}
+func (this *Box) Validate() error {
+	// Validation of proto3 map<> fields is unsupported.
+	return nil
+}
+func (this *Update) Validate() error {
+	if this.Entry != nil {
+		if err := go_proto_validators.CallValidatorIfExists(this.Entry); err != nil {
+			return go_proto_validators.FieldError("Entry", err)
+		}
+	}
+	if this.Inbox != nil {
+		if err := go_proto_validators.CallValidatorIfExists(this.Inbox); err != nil {
+			return go_proto_validators.FieldError("Inbox", err)
+		}
+	}
 	return nil
 }
 func (this *Success) Validate() error {
