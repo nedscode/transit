@@ -4,8 +4,8 @@ import (
 	"errors"
 	"strings"
 
-	"google.golang.org/grpc"
 	"github.com/norganna/style"
+	"google.golang.org/grpc"
 
 	"github.com/nedscode/transit/lib/connect"
 	"github.com/nedscode/transit/proto"

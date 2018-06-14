@@ -67,6 +67,7 @@ func (b *Backend) Ping(ctx context.Context, ping *transit.Pong) (*transit.Pong, 
 	logger = logger.WithField("user", tokenName)
 	logger = logger.WithField("req", ping)
 
+	logger.Debug("Pinged")
 	return res, nil
 }
 
@@ -131,6 +132,7 @@ func (b *Backend) Publish(ctx context.Context, p *transit.Publication) (*transit
 		Concern: wrap.Concern,
 	}
 
+	logger.Debug("Published")
 	return res, nil
 }
 
@@ -176,6 +178,8 @@ func (b *Backend) Subscribe(d *transit.Subscription, s transit.Transit_Subscribe
 		logger.WithField("strategy", strategy.String()).Info("Inbox strategy changed by subscriber")
 	}
 
+	logger.Debug("Subscription started")
+
 	running := true
 	for running {
 		var sub *transit.Sub
@@ -184,7 +188,6 @@ func (b *Backend) Subscribe(d *transit.Subscription, s transit.Transit_Subscribe
 		if wrap != nil {
 			drain(changed)
 
-			logger.WithField("entry", wrap.ID).Debug("Sending entry to subscriber")
 			sub = &transit.Sub{
 				Prefix: d.Prefix,
 				Group:  d.Group,
@@ -214,6 +217,7 @@ func (b *Backend) Subscribe(d *transit.Subscription, s transit.Transit_Subscribe
 		}
 	}
 
+	logger.Debug("Subscription ended")
 	return nil
 }
 
@@ -239,6 +243,7 @@ func (b *Backend) Ack(ctx context.Context, p *transit.Acknowledgement) (*transit
 		Success: wrap != nil,
 	}
 
+	logger.Debug("Acked")
 	return res, nil
 }
 
@@ -392,11 +397,11 @@ func (b *Backend) Dump(ctx context.Context, v *transit.Void) (*transit.Snapshot,
 	for _, box := range b.inbox.All() {
 		strategy, _ := box.Strategy(nil)
 		in := &transit.Box{
-			Prefix: box.Prefix,
-			Group: box.Group,
+			Prefix:       box.Prefix,
+			Group:        box.Group,
 			Distribution: strategy.Distribution,
-			Delivery: strategy.Delivery,
-			States: map[uint64]uint32{},
+			Delivery:     strategy.Delivery,
+			States:       map[uint64]uint32{},
 		}
 		for _, entry := range box.All() {
 			id := entry.ID

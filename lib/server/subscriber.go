@@ -2,7 +2,10 @@ package server
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
+
+	"github.com/norganna/style"
 
 	"github.com/nedscode/transit/lib/inboxes"
 	"github.com/nedscode/transit/proto"
@@ -10,6 +13,8 @@ import (
 
 type subscriber struct {
 	mu sync.RWMutex
+
+	id string
 
 	fixedAllotments   map[string]tril // doesn't need locking as it's only written at subscribe time
 	dynamicAllotments map[string]tril // use lock when reading or writing this
@@ -20,8 +25,12 @@ type subscriber struct {
 	maxAge uint64
 }
 
+var subID uint64
+
 func newSubscriber(allotments []string) *subscriber {
+	id := atomic.AddUint64(&subID, 1)
 	s := &subscriber{
+		id:                style.Sprintf("sub-%d", id),
 		fixedAllotments:   map[string]tril{},
 		dynamicAllotments: map[string]tril{},
 	}
@@ -29,6 +38,10 @@ func newSubscriber(allotments []string) *subscriber {
 		s.fixedAllotments[lot] = yes
 	}
 	return s
+}
+
+func (s *subscriber) ID() string {
+	return s.id
 }
 
 func (s *subscriber) SetAllotment(lot string, set tril) {

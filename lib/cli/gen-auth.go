@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"google.golang.org/grpc"
 	"github.com/norganna/style"
+	"google.golang.org/grpc"
 
 	"github.com/nedscode/transit/proto"
 )

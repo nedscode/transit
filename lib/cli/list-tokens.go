@@ -1,13 +1,13 @@
 package cli
 
 import (
+	"path"
 	"strings"
 
-	"google.golang.org/grpc"
 	"github.com/norganna/style"
+	"google.golang.org/grpc"
 
 	"github.com/nedscode/transit/proto"
-	"path"
 )
 
 func init() {

@@ -8,6 +8,7 @@ import (
 
 // Subscriber is an interface that defines a wildSubscriber that can accept an entry.
 type Subscriber interface {
+	ID() string
 	CanAccept(strategy *Strategy, entry *EntryWrap) (tril, time.Time)
 	HasAllotment(lot string) (has tril, fixed bool)
 	SetAllotment(lot string, set tril)
@@ -15,6 +16,10 @@ type Subscriber interface {
 }
 
 type acceptAnySubscriber struct {
+}
+
+func (a *acceptAnySubscriber) ID() string {
+	return "any"
 }
 
 func (a *acceptAnySubscriber) CanAccept(*Strategy, *EntryWrap) (tril, time.Time) {

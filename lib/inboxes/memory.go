@@ -2,10 +2,12 @@ package inboxes
 
 import (
 	"context"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/norganna/logeric"
+	"github.com/norganna/style"
 
 	"github.com/nedscode/transit/proto"
 )
@@ -74,6 +76,7 @@ type MemoryInbox struct {
 	head     uint64
 	tail     uint64
 	alive    uint64
+	counter  uint64
 
 	strategy *Strategy
 
@@ -85,18 +88,31 @@ type MemoryInbox struct {
 
 var _ Inbox = (*MemoryInbox)(nil)
 
+var debugMemNext = os.Getenv("TRANSIT_DEBUG_INBOX_NEXT") != ""
+var debugMemAlloc = os.Getenv("TRANSIT_DEBUG_INBOX_ALLOC") != ""
+
 // Add inserts the entry into the inbox, growing it if required, returns false if the inbox is at maximum capacity.
 func (i *MemoryInbox) Add(entry *EntryWrap) bool {
 	i.mu.Lock()
 	defer i.mu.Unlock()
+
+	if debugMemAlloc {
+		style.Printlnf("Adding ‹b:@%d› (head = ‹i:%d›, tail = ‹i:%d›, cap = ‹i:%d›)", i.counter, i.head, i.tail, i.capacity)
+	}
 
 	h := i.head
 	t := i.tail
 
 	next := (t + 1) % i.capacity
 	if next == h {
+		if debugMemAlloc {
+			style.Printlnf("  ‹li› at capacity")
+		}
 		// Capacity reached, need to grow.
 		if !i.grow() {
+			if debugMemAlloc {
+				style.Printlnf("  ‹ll› ‹ec:failed to grow›")
+			}
 			return false
 		}
 
@@ -105,17 +121,18 @@ func (i *MemoryInbox) Add(entry *EntryWrap) bool {
 
 	i.items[t] = entry
 	i.states[t] = Ready
-	i.changes[t] = make(chan bool, 0)
+	i.changes[t] = make(chan bool)
 	i.alive++
 	entry.CountInboxes++
 
 	i.tail = (t + 1) % i.capacity
+	if debugMemAlloc {
+		style.Printlnf("  ‹ll› added item at ‹i:%d›", t)
+	}
 
 	select {
 	case i.avail <- nil:
-		i.logger.Info("Notifying availability of new entry")
 	default:
-		i.logger.Info("Failed notifying availability (channel full?) ", i.avail, len(i.avail), cap(i.avail))
 	}
 
 	return true
@@ -124,13 +141,33 @@ func (i *MemoryInbox) Add(entry *EntryWrap) bool {
 // Next gets the next unsent item from the current list.
 func (i *MemoryInbox) Next(ctx context.Context, sub Subscriber) (*EntryWrap, <-chan bool) {
 	for {
+		if debugMemNext {
+			style.Printlnf("  ‹i:%10s› Attempting next for subscriber ", sub.ID())
+		}
 		e, c := func() (*EntryWrap, <-chan bool) {
 			i.mu.Lock()
 			defer i.mu.Unlock()
 
 			var minTime time.Time
+			if debugMemNext {
+				style.Printlnf("  ‹i:%10s›  ‹li› queue looks like: head ‹i:%d›, tail ‹i:%d›,  cap ‹i:%d›", sub.ID(), i.head, i.tail, i.capacity)
+			}
 			next, possible := i.iterate(func(t *Strategy, e *EntryWrap, s State) (can tril) {
+				if debugMemNext {
+					style.Printlnf("  ‹i:%10s›  ‹li› processing %d", sub.ID(), e.ID)
+				}
+
+				if e.Expired {
+					if debugMemNext {
+						style.Printlnf("  ‹i:%10s›  ‹li›  ‹ll› item is expired", sub.ID())
+					}
+					return no
+				}
+
 				if s != Ready {
+					if debugMemNext {
+						style.Printlnf("  ‹i:%10s›  ‹li›  ‹ll› not ready", sub.ID())
+					}
 					return no
 				}
 
@@ -148,6 +185,9 @@ func (i *MemoryInbox) Next(ctx context.Context, sub Subscriber) (*EntryWrap, <-c
 							// We can't receive this yet because the message is too young.
 							can = no
 							entryTime = unix
+							if debugMemNext {
+								style.Printlnf("  ‹i:%10s›  ‹li›  ‹li› too early", sub.ID())
+							}
 						}
 					}
 					if e.NotAfter > 0 {
@@ -157,11 +197,17 @@ func (i *MemoryInbox) Next(ctx context.Context, sub Subscriber) (*EntryWrap, <-c
 							// This message has passed it's expiry time (and will need to be collected).
 							e.Expired = true
 							can = no
+							if debugMemNext {
+								style.Printlnf("  ‹i:%10s›  ‹li›  ‹li› ‹ec:too late!› item is expired", sub.ID())
+							}
 						}
 					}
 				}
 
 				subCan, subTime := sub.CanAccept(t, e)
+				if debugMemNext && subCan == no {
+					style.Printlnf("  ‹i:%10s›  ‹li›  ‹li› subscriber doesn't want it", sub.ID())
+				}
 				if subCan == no && !subTime.IsZero() && subTime.After(entryTime) {
 					entryTime = subTime
 				}
@@ -172,25 +218,62 @@ func (i *MemoryInbox) Next(ctx context.Context, sub Subscriber) (*EntryWrap, <-c
 					minTime = entryTime
 				}
 
+				if debugMemNext {
+					var delay int64
+					if !entryTime.IsZero() {
+						delay = int64(time.Until(entryTime) / time.Millisecond)
+					}
+					match := "no"
+					switch can {
+					case maybe:
+						match = "possible"
+					case yes:
+						match = "found"
+					}
+
+					style.Printlnf("  ‹i:%10s›  ‹li›  ‹ll› %s match (available in: %dms)", sub.ID(), match, delay)
+				}
+
 				return
 			})
 
 			if !minTime.IsZero() {
 				i.setTime <- minTime
+				if debugMemNext {
+					delay := uint(time.Until(minTime) / time.Millisecond)
+					style.Printlnf("  ‹i:%10s›  ‹ll› min time: %dms", sub.ID(), delay)
+				}
 			}
 
 			if len(possible) > 0 {
+				if debugMemNext {
+					style.Printlnf("  ‹i:%10s›  ‹li› checking possibles", sub.ID())
+				}
 				if i.strategy.Distribution != transit.DistributionStrategy_Requested {
 					next = possible[0]
 					if i.strategy.Distribution == transit.DistributionStrategy_Assigned {
 						sub.SetAllotment(next.wrap.Lot, yes)
 					}
+					if debugMemNext {
+						style.Printlnf("  ‹i:%10s›  ‹li›  ‹ll› using possible %d", sub.ID(), next.wrap.ID)
+					}
 				}
 			}
 
+			if debugMemNext {
+				style.Printlnf("  ‹i:%10s›  ‹li› finished looking", sub.ID())
+			}
+
 			if next != nil {
+				if debugMemNext {
+					style.Printlnf("  ‹i:%10s›  ‹ll› found next ‹i:%d›", sub.ID(), next.wrap.ID)
+				}
 				*next.state = Sent
 				return next.wrap, next.change
+			}
+
+			if debugMemNext {
+				style.Printlnf("  ‹i:%10s›  ‹ll› ‹ec:next not found›", sub.ID())
 			}
 			return nil, nil
 		}()
@@ -239,7 +322,7 @@ func (i *MemoryInbox) Ack(a *transit.Acknowledgement) *EntryWrap {
 
 	// Only a Sent item may be ACKed.
 	if found != nil && found.state != nil && *found.state == Sent {
-		notify := false
+		var notify bool
 		if a.Ack {
 			// Mark it as ACKed.
 			*found.state = Acked
@@ -270,7 +353,17 @@ func (i *MemoryInbox) Ack(a *transit.Acknowledgement) *EntryWrap {
 	}
 
 	if advance > 0 {
+		i.counter += advance
 		i.head = (i.head + advance) % i.capacity
+		e := i.items[i.head]
+		id := uint64(0)
+		if e != nil {
+			id = e.ID
+		}
+
+		if debugMemAlloc {
+			style.Printlnf("Advancing ‹b:%d› -> ‹b:%d› #%d (head = ‹i:%d›, tail = ‹i:%d›, cap = ‹i:%d›)", advance, i.counter, id, i.head, i.tail, i.capacity)
+		}
 	}
 
 	if found == nil || found.state == nil {
@@ -284,13 +377,12 @@ func (i *MemoryInbox) All() (all []InboxItem) {
 	i.iterate(func(_ *Strategy, e *EntryWrap, s State) tril {
 		all = append(all, InboxItem{
 			EntryWrap: e,
-			State: s,
+			State:     s,
 		})
 		return no
 	})
 	return
 }
-
 
 // Strategy updates (optionally) the current strategy and returns the new strategy and whether it was updated.
 func (i *MemoryInbox) Strategy(set *Strategy) (Strategy, bool) {
@@ -309,7 +401,7 @@ type iterItem struct {
 
 // iterate over items in order until selector returns yes, then returns the selected entry.
 func (i *MemoryInbox) iterate(cb iterSelectorFunc) (found *iterItem, possible []*iterItem) {
-	for j := i.head; j < i.tail; j = (j + 1) % i.capacity {
+	for j := i.head; j < i.tail || i.tail < i.head && j >= i.head; j = (j + 1) % i.capacity {
 		e := i.items[j]
 		s := &i.states[j]
 		c := i.changes[j]
@@ -350,6 +442,10 @@ func (i *MemoryInbox) grow() bool {
 		return i.compact()
 	}
 
+	if debugMemAlloc {
+		style.Printlnf("  ‹li› growing ‹b:@%d› (head = ‹i:%d›, tail = ‹i:%d›, cap = ‹i:%d›)", i.counter, i.head, i.tail, i.capacity)
+	}
+
 	head := i.head
 	tail := i.tail
 	cap := i.capacity
@@ -359,8 +455,16 @@ func (i *MemoryInbox) grow() bool {
 		bufCap = i.max
 	}
 
+	if debugMemAlloc {
+		style.Printlnf("  ‹li›  ‹li› new capacity = %d", bufCap)
+	}
+
 	if bufCap <= cap {
 		// Can't resize smaller
+		if debugMemAlloc {
+			style.Printlnf("  ‹li›  ‹ll› ‹ec:cap is not larger than existing cap›")
+		}
+
 		return false
 	}
 
@@ -372,6 +476,10 @@ func (i *MemoryInbox) grow() bool {
 		// Zero length list requires no copying
 		i.head = 0
 		i.tail = 0
+
+		if debugMemAlloc {
+			style.Printlnf("  ‹li›  ‹li› head = tail, no copy")
+		}
 	} else if head < tail {
 		// Simple copy (head->tail)
 		copy(itemsBuf, i.items[head:tail])
@@ -379,6 +487,10 @@ func (i *MemoryInbox) grow() bool {
 		copy(changesBuf, i.changes[head:tail])
 		i.head = 0
 		i.tail = tail - head
+
+		if debugMemAlloc {
+			style.Printlnf("  ‹li›  ‹li› head < tail, straight copy")
+		}
 	} else {
 		// Wraps around the end (head->cap + 0->tail)
 		copy(itemsBuf, i.items[head:cap])
@@ -389,13 +501,28 @@ func (i *MemoryInbox) grow() bool {
 		copy(changesBuf[cap-head:bufCap], i.changes[0:tail])
 		i.head = 0
 		i.tail = cap - head + tail
+
+		if debugMemAlloc {
+			style.Printlnf("  ‹li›  ‹li› head > tail, double copy")
+		}
 	}
 
 	i.items = itemsBuf
+	i.states = statesBuf
+	i.changes = changesBuf
+	i.capacity = bufCap
+
+	if debugMemAlloc {
+		style.Printlnf("  ‹li›  ‹ll› copy completed (head = ‹i:%d›, tail = ‹i:%d›, cap = ‹i:%d›)", i.head, i.tail, i.capacity)
+	}
 	return true
 }
 
 func (i *MemoryInbox) compact() bool {
+	if debugMemAlloc {
+		style.Printlnf("Compacting ‹b:@%d› (head = ‹i:%d›, tail = ‹i:%d›, cap = ‹i:%d›)", i.counter, i.head, i.tail, i.capacity)
+	}
+
 	n := i.alive
 	itemsBuf := make([]*EntryWrap, n)
 	stateBuf := make([]State, n)

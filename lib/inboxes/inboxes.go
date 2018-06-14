@@ -63,6 +63,7 @@ type InboxStats struct {
 // InboxFactory is a function that can return a new Inbox if required.
 type InboxFactory func(ctx context.Context) Inbox
 
+// InboxItem is used to return All().
 type InboxItem struct {
 	*EntryWrap
 	State
@@ -73,7 +74,7 @@ type Inbox interface {
 	Add(*EntryWrap) bool
 	Next(context.Context, Subscriber) (*EntryWrap, <-chan bool)
 	Ack(*transit.Acknowledgement) *EntryWrap
-	All() ([]InboxItem)
+	All() []InboxItem
 
 	Strategy(*Strategy) (updated Strategy, changed bool)
 }
@@ -196,7 +197,6 @@ func (i *Inboxes) All() (d []*inboxDetail) {
 	}
 	return
 }
-
 
 // Cheap method to get a preexisting inbox using only a read lock.
 func (i *Inboxes) getInbox(prefix, group string) (inbox *inboxDetail) {

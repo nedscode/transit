@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"time"
 
@@ -30,6 +31,11 @@ func main() {
 	if uri == "" {
 		logger.Fatal("Supply a connection uri with `-cluster`.")
 	}
+
+	rand.Seed(time.Now().UnixNano())
+	dur := rand.Int63n(8000)
+	logger.Infof("Sleeping for %dms..", dur)
+	time.Sleep(time.Duration(dur) * time.Millisecond)
 
 	tc, err := transit.Connect(
 		context.Background(),
@@ -104,9 +110,9 @@ func main() {
 	}
 
 	logger.WithFieldList(logeric.FieldList{
-		{"id", p.ID()},
-		{"concern", p.Concern()},
-		{"error", p.Err()},
+		{K: "id", V: p.ID()},
+		{K: "concern", V: p.Concern()},
+		{K: "error", V: p.Err()},
 	}).Info("Published my entry")
 
 	// The handler will take a single message from the queue, acking it when the handler finishes.
@@ -121,20 +127,21 @@ func main() {
 		if err == nil {
 			// Process message
 			logger.WithFieldList(logeric.FieldList{
-				{"topic", e.Topic},
-				{"id", e.ID},
+				{K: "topic", V: e.Topic},
+				{K: "id", V: e.ID},
 			}).Info("Hey! I just got an entry")
 
 			if v, ok := dyn.Message.(*bar.Bar); ok {
 				logger.WithFieldList(logeric.FieldList{
-					{"topic", e.Topic},
-					{"baz", v.Baz},
+					{K: "topic", V: e.Topic},
+					{K: "baz", V: v.Baz},
 				}).Infof("My Bar arrived")
 			}
 		}
 
-		logger.Info("Sleeping for 5...")
-		time.Sleep(5*time.Second)
+		dur := rand.Int63n(8000)
+		logger.Infof("Sleeping for %dms..", dur)
+		time.Sleep(time.Duration(dur) * time.Millisecond)
 
 		return transit.ErrShuttingDown
 	})

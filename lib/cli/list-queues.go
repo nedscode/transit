@@ -3,11 +3,11 @@ package cli
 import (
 	"time"
 
-	"google.golang.org/grpc"
 	"github.com/norganna/style"
+	"google.golang.org/grpc"
 
-	"github.com/nedscode/transit/proto"
 	"github.com/nedscode/transit/lib/inboxes"
+	"github.com/nedscode/transit/proto"
 )
 
 func init() {
@@ -82,9 +82,9 @@ func (c *Config) listQueues() error {
 			expired = "Yes"
 		}
 
-		inserted := time.Unix(int64(boxItem.Inserted / 1000), int64(boxItem.Inserted % 1000 * uint64(time.Millisecond)))
+		inserted := time.Unix(int64(boxItem.Inserted/1000), int64(boxItem.Inserted%1000*uint64(time.Millisecond)))
 
-		delta := float64(time.Now().Sub(inserted)) / float64(time.Second)
+		delta := float64(time.Since(inserted)) / float64(time.Second)
 		unit := "s"
 		if delta > 60 {
 			delta = delta / 60
